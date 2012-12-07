@@ -37,7 +37,7 @@ DBHANDLE OpenHDB(char *path) {
     // open the database
     if ( !tchdbopen(newhdb, path, HDBOWRITER | HDBOCREAT) ) {
         error_code = tchdbecode(newhdb);
-        printf("open hdb error: %s\n", tchdberrmsg(error_code));
+        printf("Open hdb error: %s\n", tchdberrmsg(error_code));
         return NULL;
     }
     return newhdb;
@@ -51,7 +51,7 @@ int CloseHDB(DBHANDLE hdb) {
 
     if ( !tchdbclose((TCHDB *)hdb) ) {
         error_code = tchdbecode((TCHDB *)hdb);
-        printf("close hdb error: %s\n", tchdberrmsg(error_code));
+        printf("Close hdb error: %s\n", tchdberrmsg(error_code));
         return -1;
     }
     tchdbdel((TCHDB *)hdb);
@@ -67,7 +67,7 @@ int PutKeyValue(DBHANDLE hdb, int key, const value_struct *value) {
 
     if ( !tchdbput((TCHDB *)hdb, &key, sizeof(int), value->content, value->size) ) {
         error_code = tchdbecode((TCHDB *)hdb);
-        printf("put KV error: %s\n", tchdberrmsg(error_code));
+        printf("Put Key-Value error: %s\n", tchdberrmsg(error_code));
         return -1;
     }
 
@@ -90,7 +90,7 @@ value_struct *GetValue(DBHANDLE hdb, int key) {
         value->size = vsize;
     } else {
         error_code = tchdbecode((TCHDB *)hdb);
-        printf("get Value error: %s\n", tchdberrmsg(error_code));
+        printf("Get Value error: %s\n", tchdberrmsg(error_code));
         return NULL;
     }
 
@@ -114,7 +114,7 @@ int DelKeyValue(DBHANDLE hdb, int key) {
 
     if ( !tchdbout((TCHDB *)hdb, &key, sizeof(int)) ) {
         error_code = tchdbecode((TCHDB *)hdb);
-        printf("delete key/value error: %s\n", tchdberrmsg(error_code));
+        printf("Delete key/value error: %s\n", tchdberrmsg(error_code));
         return -1;
     }
 
