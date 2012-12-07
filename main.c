@@ -149,37 +149,6 @@ int main() {
         cmdbuf[strlen(cmdbuf) - 1] = '\0';
         ExecCommand(cmdbuf);
     }
-    /*DBHANDLE db;
-    value_struct value;
-    value_struct *rv;
-    int key;
-    int ret;
-
-    db = OpenHDB("db.hdb");
-    if (db == NULL) {
-        return -1;
-    }
-    key = 4;
-    value.content = strdup("hello world!");
-    value.size = strlen(value.content);
-    ret = PutKeyValue(db, key, &value);
-    if (ret == -1) {
-        printf("put key/value error: %d / %s\n", key, (char *)value.content);
-    }
-    rv = GetValue(db, key);
-    if (rv) { 
-        printf("%s - %d\n", (char *)rv->content, rv->size);
-        FreeValueStruct(rv);
-    }
-    DelKeyValue(db, key);
-
-    rv = GetValue(db, key);
-    if (rv) { 
-        printf("%s - %d\n", (char *)rv->content, rv->size);
-        FreeValueStruct(rv);
-    }
-
-    CloseHDB(db);*/
     return 0;
 }
 
