@@ -79,7 +79,7 @@ void ExecCommand(char *command) {
     if ( CommandMatching(command, "\\?") == 0 ) {
         HELP_INFO();
     } 
-    else if ( CommandMatching(command, "open( *|\\t).*\\.hdb") == 0 ) {
+    else if ( CommandMatching(command, "open( +|\\t).+\\.hdb$") == 0 ) {
         if (strlen(DBName) != 0) {
             printf("Close current data file '%s' first.\n", DBName);
         }
@@ -94,7 +94,7 @@ void ExecCommand(char *command) {
     else if ( db == NULL && CommandMatching(command, "put|get|delete|close") == 0 ) {
         printf("Open a data file first!\n");
     }
-    else if ( CommandMatching(command, "put( *|\\t)[0-9]*( *|\\t).*") == 0 ) {
+    else if ( CommandMatching(command, "put( +|\\t)[0-9]+( +|\\t).+") == 0 ) {
         int key;
         value_struct value;
         char temp[STRING_LEN] = "\0";
@@ -105,7 +105,7 @@ void ExecCommand(char *command) {
             printf("Success\n");
         }
     }
-    else if ( CommandMatching(command, "get( *|\\t)[0-9]*") == 0 ) {
+    else if ( CommandMatching(command, "get( +|\\t)[0-9]+$") == 0 ) {
         int key;
         value_struct *value;
         sscanf(command, "get %d", &key);
@@ -115,7 +115,7 @@ void ExecCommand(char *command) {
             FreeValueStruct(value);
         }
     }
-    else if ( CommandMatching(command, "delete( *|\\t)[0-9]*") == 0 ) {
+    else if ( CommandMatching(command, "delete( +|\\t)[0-9]+$") == 0 ) {
         int key = -1;
         sscanf(command, "delete %d", &key);
         if (DelKeyValue(db, key) == 0) {
