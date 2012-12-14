@@ -1,14 +1,20 @@
 # makefile for pudge
 
-objects = main.o hdbapi.o
+TARGETS = server client
 
-all: pudge
+objects1 = dbserver.o hdbapi.o network.o protocol.o
+objects2 = dbclient.o hdbapi.o network.o protocol.o
 
-pudge: $(objects)
-	gcc -o pudge $(objects) -ltokyocabinet
+all: server client
+
+server: $(objects1)
+	gcc -o server $(objects1) -ltokyocabinet
+
+client: $(objects2)
+	gcc -o client $(objects2) -ltokyocabinet
 
 .c.o:
 	gcc -c $<
 
 clean:
-	rm pudge *.o
+	rm server client *.o
