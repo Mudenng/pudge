@@ -123,7 +123,7 @@ int InitializeClient(char *ip, int port) {
 		close(client_sockfd);
 		return -1;
 	}
-    printf("connected server(%s:%d) successfully.", ip, port);
+    printf("connected server(%s:%d) successfully.\n", ip, port);
     return client_sockfd;
 }
 

@@ -18,7 +18,6 @@
  *
  */
 
-#include "hdbapi.h"
 #include "network.h"
 #include "protocol.h"
 
@@ -26,7 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <regex.h>
-#include <arpa/inet.h>
+//#include <arpa/inet.h>
 
 #define HELP_INFO()                                                 \
         printf("-------------------------------------------\n");    \
@@ -41,14 +40,13 @@
         printf(" 'exit'          - Exit\n");                        \
         printf("-------------------------------------------\n");
 
-#define ADDR "127.0.0.1"
+#define ADDR "192.168.10.110"
 #define PORT 9999
 #define BUFFER_SIZE 1000
 
 
 char DBName[BUFFER_SIZE] = "\0";
 int sockfd = -1;
-DBHANDLE db;
 
 int CommandMatching(char *command, char *pattern) {
     regex_t reg;
@@ -101,12 +99,12 @@ void ExecCommand(char *command) {
     }
     else if ( CommandMatching(command, "put( +|\\t)[0-9]+( +|\\t).+") == 0 ) {
         int key;
-        value_struct value;
+        char p[BUFFER_SIZE] = "\0";
         char temp[BUFFER_SIZE] = "\0";
-        sscanf(command, "put %d %s", &key, temp);
-        value.content = temp;
-        value.size = strlen((char *)value.content);
-        CreateMsg2(buffer, &send_size, PUT, &key, sizeof(int), value.content, value.size);
+        sscanf(command, "put %d %s", &key, p);
+        char *l = strstr(command, p);
+        strcpy(temp, l);
+        CreateMsg2(buffer, &send_size, PUT, &key, sizeof(int), temp, strlen(temp));
         SendMsg(sockfd, buffer, send_size);
         back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
         AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
@@ -119,7 +117,6 @@ void ExecCommand(char *command) {
     }
     else if ( CommandMatching(command, "get( +|\\t)[0-9]+$") == 0 ) {
         int key;
-        value_struct *value;
         sscanf(command, "get %d", &key);
         CreateMsg1(buffer, &send_size, GET, &key, sizeof(int));
         SendMsg(sockfd, buffer, send_size);
@@ -173,7 +170,7 @@ void ExecCommand(char *command) {
 int main() {
     char buffer[BUFFER_SIZE];
     // init
-    sockfd = InitializeClient("127.0.0.1", 9999);
+    sockfd = InitializeClient(ADDR, PORT);
 	// receive welcome message from the server
 	int len = RecvMsg(sockfd, &buffer, BUFFER_SIZE);
 	buffer[len] = '\0';
