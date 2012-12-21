@@ -34,6 +34,8 @@ DBHANDLE OpenHDB(char *path) {
     // create the object
     newhdb = tchdbnew();
 
+    tchdbsetmutex(newhdb);
+
     // open the database
     if ( !tchdbopen(newhdb, path, HDBOWRITER | HDBOCREAT) ) {
         error_code = tchdbecode(newhdb);

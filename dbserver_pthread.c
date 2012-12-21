@@ -21,11 +21,13 @@
 #include "hdbapi.h"
 #include "network.h"
 #include "protocol.h"
+#include "hash.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
 
 #define ADDR "127.0.0.1"
@@ -33,18 +35,22 @@
 #define MAX_CONNECTS 100
 #define BUFFER_SIZE 1000
 
-DBHANDLE db = NULL;
+#define DBNAME_SIZE 20
 
-int main() {
-    int server_sockfd = InitializeServer(ADDR, PORT, MAX_CONNECTS);
-    int client_sockfd;
-    struct sockaddr_in client_addr;
-    int sin_size = sizeof(struct sockaddr_in);
-    if (server_sockfd != -1) {
-        client_sockfd = WaitClient(server_sockfd, &client_addr, &sin_size);
-    }
+HASHTABLE db_handle_table;
 
-    while (1) {
+typedef struct {
+    DBHANDLE hdb;
+    int used;
+}DB_HANDLE_NODE;
+
+
+void HandleRequest(void *arg) {
+    int client_sockfd = *(int *)arg;
+    DBHANDLE db = NULL;
+    char *dbname = (char *)malloc(DBNAME_SIZE);
+    DB_HANDLE_NODE dhn;
+    while(1) {
         char buffer[BUFFER_SIZE];
         char data1[BUFFER_SIZE];
         char data2[BUFFER_SIZE];
@@ -57,32 +63,65 @@ int main() {
         switch(cmd_code) {
             case OPEN:
                 data1[size1] = '\0';
-                db = OpenHDB(data1);
-                if (db != NULL) {
-                    CreateMsg0(buffer, &back_size, OPEN_OK);
+                memset(dbname, 0, DBNAME_SIZE);
+                memcpy(dbname, data1, size1);
+                if (HashGetValue(db_handle_table, dbname, &dhn) == 0) {
+                    db = OpenHDB(data1);
+                    if (db != NULL) {
+                        dhn.hdb = db;
+                        dhn.used = 1;
+                        HashAddNode(db_handle_table, dbname, &dhn);
+                        CreateMsg0(buffer, &back_size, OPEN_OK);
+                    }
+                    else {
+                        CreateMsg0(buffer, &back_size, ERROR);
+                    }
                 }
                 else {
-                    CreateMsg0(buffer, &back_size, ERROR);
+                    db = dhn.hdb;
+                    dhn.used++;
+                    HashDelete(db_handle_table, dbname);
+                    HashAddNode(db_handle_table, dbname, &dhn);
+                    CreateMsg0(buffer, &back_size, OPEN_OK);
                 }
                 SendMsg(client_sockfd, buffer, back_size);
-                printf("handled 'OPEN %s' from '%s'\n", data1, inet_ntoa(client_addr.sin_addr));
+                printf("handled 'OPEN %s' from %d\n", data1, client_sockfd);
                 break;
             case CLOSE:
-                CloseHDB(db);
+                HashGetValue(db_handle_table, dbname, &dhn);
+                dhn.used--;
+                if (dhn.used <= 0) {
+                    CloseHDB(db);
+                    HashDelete(db_handle_table, dbname);
+                }
+                else {
+                    HashDelete(db_handle_table, dbname);
+                    HashAddNode(db_handle_table, dbname, &dhn);
+                }
                 db = NULL;
+                memset(dbname, 0, DBNAME_SIZE);
                 CreateMsg0(buffer, &back_size, CLOSE_OK);
                 SendMsg(client_sockfd, buffer, back_size);
-                printf("handled 'CLOSE' from '%s'\n", inet_ntoa(client_addr.sin_addr));
+                printf("handled 'CLOSE' from %d\n", client_sockfd);
                 break;
             case EXIT:
-                if (db)
+                HashGetValue(db_handle_table, dbname, &dhn);
+                dhn.used--;
+                if (dhn.used <= 0) {
                     CloseHDB(db);
+                    HashDelete(db_handle_table, dbname);
+                }
+                else {
+                    HashDelete(db_handle_table, dbname);
+                    HashAddNode(db_handle_table, dbname, &dhn);
+                }
                 db = NULL;
                 CreateMsg0(buffer, &back_size, CLOSE_OK);
                 SendMsg(client_sockfd, buffer, back_size);
                 CloseClient(client_sockfd);
-                printf("handled 'EXIT' from '%s'\n", inet_ntoa(client_addr.sin_addr));
-                printf("client '%s' disconnected.\n", inet_ntoa(client_addr.sin_addr));
+                printf("handled 'EXIT' from %d\n", client_sockfd);
+                printf("client %d disconnected.\n", client_sockfd);
+                return;
                 break;
             case PUT:
                 if (db != NULL) {
@@ -97,7 +136,7 @@ int main() {
                     else {
                         CreateMsg0(buffer, &back_size, ERROR);
                     }
-                    printf("handled 'PUT %d %s' from '%s'\n", key, data2, inet_ntoa(client_addr.sin_addr));
+                    printf("handled 'PUT %d %s' from %d\n", key, data2, client_sockfd);
                 }
                 else {
                     CreateMsg0(buffer, &back_size, ERROR);
@@ -116,7 +155,7 @@ int main() {
                     else {
                         CreateMsg0(buffer, &back_size, ERROR);
                     }
-                    printf("handled 'GET %d' from '%s'\n", key, inet_ntoa(client_addr.sin_addr));
+                    printf("handled 'GET %d' from %d\n", key, client_sockfd);
                 }
                 else {
                     CreateMsg0(buffer, &back_size, ERROR);
@@ -132,7 +171,7 @@ int main() {
                     else {
                         CreateMsg0(buffer, &back_size, ERROR);
                     }
-                    printf("handled 'DELETE %d' from '%s'\n", key, inet_ntoa(client_addr.sin_addr));
+                    printf("handled 'DELETE %d' from %d\n", key, client_sockfd);
                 }
                 else {
                     CreateMsg0(buffer, &back_size, ERROR);
@@ -142,6 +181,24 @@ int main() {
 
         }
     }
+}
+
+int main() {
+    int server_sockfd = InitializeServer(ADDR, PORT, MAX_CONNECTS);
+    int client_sockfd;
+    struct sockaddr_in client_addr;
+    int sin_size = sizeof(struct sockaddr_in);
+    if (server_sockfd != -1) {
+        db_handle_table = CreateTablePJW(10, DBNAME_SIZE, sizeof(DB_HANDLE_NODE));
+        while(1) {
+            client_sockfd = WaitClient(server_sockfd, &client_addr, &sin_size);
+            pthread_t pid;
+            pthread_create(&pid, NULL, (void *)HandleRequest, &client_sockfd);
+            // HandleRequest(client_sockfd);
+        }
+    }
+
     CloseServer(server_sockfd, client_sockfd);
     return 0;
 }
+

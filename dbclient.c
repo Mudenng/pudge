@@ -40,7 +40,7 @@
         printf(" 'exit'          - Exit\n");                        \
         printf("-------------------------------------------\n");
 
-#define ADDR "192.168.10.110"
+#define ADDR "127.0.0.1"
 #define PORT 9999
 #define BUFFER_SIZE 1000
 
