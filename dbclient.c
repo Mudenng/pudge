@@ -25,7 +25,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <regex.h>
-//#include <arpa/inet.h>
 
 #define HELP_INFO()                                                 \
         printf("-------------------------------------------\n");    \
@@ -40,7 +39,7 @@
         printf(" 'exit'          - Exit\n");                        \
         printf("-------------------------------------------\n");
 
-#define ADDR "192.168.10.107"
+#define ADDR "127.0.0.1"
 #define PORT 9999
 #define BUFFER_SIZE 1000
 
@@ -159,7 +158,8 @@ void ExecCommand(char *command) {
     else if ( CommandMatching(command, "exit") == 0 ) {
         CreateMsg0(buffer, &send_size, EXIT);
         SendMsg(sockfd, buffer, send_size);
-        CloseClient(sockfd);
+        sleep(2);
+        CloseSocket(sockfd);
         exit(0);
     }
     else {

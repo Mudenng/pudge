@@ -21,9 +21,17 @@
 #ifndef PUDGE_NETWORK_H
 #define PUDGE_NETWORK_H
 
+#include <event2/event.h>
 #include <arpa/inet.h>
 
 #define MAX_CONNS 1024
+
+typedef struct {
+    char *ip;
+    int port;
+    int max_conn;
+    event_callback_fn recv_callback_fn;
+}SERVER_START_ARG;
 
 /*
  * Init server
@@ -33,17 +41,7 @@
  * return   : if SUCCESS return server_sockfd
  *          : if FAILURE return -1
  */
-int InitializeServer(char *ip, int port, int max_conn);
-
-/*
- * Wait a client
- * input    : server_sockfd, client address struct
- * output   : client_sockfd
- * in/out   : None
- * return   : if SUCCESS return client_sockfd
- *          : if FAILURE return -1
- */
-int WaitClient(int server_sockfd, struct sockaddr_in *client_addr, int *sin_size);
+int StartServer(void *arg);
 
 /*
  * Init client
@@ -56,22 +54,13 @@ int WaitClient(int server_sockfd, struct sockaddr_in *client_addr, int *sin_size
 int InitializeClient(char *ip, int port);
 
 /*
- * Close server
- * input    : server_sockfd, client_sockfd
- * output   : None
- * in/out   : None
- * return   : None
- */
-void CloseServer(int server_sockfd, int client_sockfd);
-
-/*
- * Close client
+ * Close socket fd
  * input    : sockfd
  * output   : None
  * in/out   : None
  * return   : None
  */
-void CloseClient(int client_sockfd);
+void CloseSocket(int sockfd);
 
 /*
  * Send a message

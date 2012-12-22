@@ -20,35 +20,17 @@
 
 #include "network.h"
 
+#include <event2/event.h>
 #include <arpa/inet.h>
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <sys/epoll.h>
-#include <fcntl.h>
 
-int efd;
-
-/*
- * Make a sockfd non_blocking
- */
-int make_socket_non_blocking (int fd) {
-    int opts;
-    opts = fcntl(fd,F_GETFL);
-    if(opts < 0)
-    {
-        fprintf(stderr,"fcntl(sock,GETFL) Error,%s:%d\n", __FILE__,__LINE__);
-        exit(1);
-    }
-    /* set non blocking */
-    opts = opts|O_NONBLOCK;
-    if(fcntl(fd,F_SETFL,opts) < 0)
-    {
-        fprintf(stderr,"fcntl(sock,SETFL,opts) Error,%s:%d\n", __FILE__,__LINE__);
-        exit(1);
-    }    
-}
+typedef struct {
+    struct event_base *base;
+    event_callback_fn callback_fn;
+}callback_arg;
 
 /*
  * Create socket
@@ -67,20 +49,12 @@ int PrepareSocket() {
  * Init server address , bind socket, listen
  */
 int InitServer(int sockfd, char *ip, int port, int max_conn) {
-    struct epoll_event event;
 	struct sockaddr_in addr;
 	memset(&addr, 0, sizeof(struct sockaddr_in));
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = inet_addr(ip);
 	memset(&addr.sin_zero, 0, 8);
-
-    // init epoll
-    efd = epoll_create(MAX_CONNS);
-    make_socket_non_blocking(sockfd);
-    event.data.fd = sockfd;
-    event.events = EPOLLIN | EPOLLRDHUP;
-    epoll_ctl(efd, EPOLL_CTL_ADD, sockfd, &event);
 
 	// bind 
 	if ( bind(sockfd, (struct sockaddr *)&addr, sizeof(struct sockaddr) ) < 0 ) {
@@ -101,71 +75,66 @@ int InitServer(int sockfd, char *ip, int port, int max_conn) {
 }
 
 /*
- * Wait a client
+ * Accept callback function
  */
-int WaitClient(int server_sockfd, struct sockaddr_in *client_addr, int *sin_size) {
-	int client_sockfd = -1;
-
-	memset(client_addr, 0, sizeof(struct sockaddr_in));
-	// accept cilent's connection
-	client_sockfd = accept(server_sockfd, (struct sockaddr *)client_addr, sin_size);
-	if (client_sockfd < 0) {
-		printf("accept error.\n");
-	}
-	printf("accept client - %s\n", inet_ntoa(client_addr->sin_addr));
-
-	// send welcome message to client
-	int len = SendMsg(client_sockfd, "Welcome to this server!\n", 24);
-	if (len < 0) {
-		printf("send welcome error.\n");
-	}	
-	return client_sockfd;
-}
-
-int ClientRequest(int server_sockfd) {
-    while(1) {
-        struct epoll_event event;
-        int fdnum = epoll_wait(efd, &event, 1, -1);
-        if(event.data.fd == server_sockfd) {
-            struct sockaddr_in clientaddr;
-            socklen_t addr_len = sizeof(struct sockaddr);
-            int newfd = accept(server_sockfd, (struct sockaddr *)&clientaddr, &addr_len);
-            if(newfd == -1) {
-		        printf("accept error.\n");
-            }
-	        printf("accept client - %s\n", inet_ntoa(clientaddr.sin_addr));
-
-	        // send welcome message to client
-	        int len = SendMsg(newfd, "Welcome to this server!\n", 24);
-	        if (len < 0) {
-		        printf("send welcome error.\n");
-	        }
-            make_socket_non_blocking(newfd);
-            event.data.fd = newfd;
-            event.events = EPOLLIN;
-            epoll_ctl(efd, EPOLL_CTL_ADD, newfd, &event);
-        }
-        
-        else if((event.events & EPOLLIN) && (event.events & EPOLLRDHUP)) {
-            close(event.data.fd);
-        }
-        else {
-            return event.data.fd;
-        }
+void AcceptHandle(int server_sockfd, short event, void *arg) {
+    callback_arg *callarg = (callback_arg *)arg;
+    struct event_base *base = callarg->base;
+    event_callback_fn recv_callback_fn = callarg->callback_fn;
+    struct sockaddr_in clientaddr;
+    socklen_t addr_len = sizeof(struct sockaddr);
+    
+    // accept client connection
+    int newfd = accept(server_sockfd, (struct sockaddr*)&clientaddr, &addr_len);
+    if (newfd < 0) {
+        printf("Accept error.\n");
+        return;
     }
+    printf("Accept client (%s) at sockfd = %d\n", inet_ntoa(clientaddr.sin_addr), newfd);
+
+    // add new client event
+    struct event *recv_event = event_new(base, newfd, EV_READ | EV_PERSIST, recv_callback_fn, NULL);
+    event_add(recv_event, NULL);
+
+    // send welcome message to client
+	int len = SendMsg(newfd, "Welcome to this server!\n", 24);
+	if (len < 0) {
+		printf("Send welcome to %s error\n", inet_ntoa(clientaddr.sin_addr));
+	}
 }
 
 /*
  * Init server
  */
-int InitializeServer(char *ip, int port, int max_conn) {
+int StartServer(void *arg) {
+    char *ip = ((SERVER_START_ARG *)arg)->ip;
+    int port = ((SERVER_START_ARG *)arg)->port;
+    int max_conn = ((SERVER_START_ARG *)arg)->max_conn;
+    event_callback_fn recv_callback_fn = ((SERVER_START_ARG *)arg)->recv_callback_fn;
     // prepare socket
 	int server_sockfd = PrepareSocket();
 	if ( InitServer(server_sockfd, ip, port, max_conn) != 0 ) {
 		printf("Server start error.\n");
 		return -1;
 	}
-	printf("Server start ok.\n");
+
+    // make non_blocking
+    evutil_make_listen_socket_reuseable(server_sockfd);
+
+    // init event
+    struct event_base *base = event_base_new();
+    assert(base != NULL);
+    struct event *listen_event;
+    callback_arg callarg;
+    callarg.base = base;
+    callarg.callback_fn = recv_callback_fn;
+    listen_event = event_new(base, server_sockfd, EV_READ|EV_PERSIST, AcceptHandle, (void *)&callarg);
+    event_add(listen_event, NULL);
+
+    // start event
+	printf("Server Start\n");
+    event_base_dispatch(base);
+
     return server_sockfd;
 }
 
@@ -186,27 +155,12 @@ int InitializeClient(char *ip, int port) {
 
     // connect to server
 	if ( connect(client_sockfd, (struct sockaddr *)&server_addr, sizeof(struct sockaddr)) < 0 ) {
-		printf("connect error.\n");
+		printf("Connect error.\n");
 		close(client_sockfd);
 		return -1;
 	}
-    printf("connected server(%s:%d) successfully.\n", ip, port);
+    printf("Connect to server(%s:%d) successfully\n", ip, port);
     return client_sockfd;
-}
-
-/*
- * Close server
- */
-void CloseServer(int server_sockfd, int client_sockfd) {
-    close(server_sockfd);
-    close(client_sockfd);
-}
-
-/*
- * Close client
- */
-void CloseClient(int client_sockfd) {
-    close(client_sockfd);
 }
 
 /*
@@ -229,4 +183,9 @@ int RecvMsg(int sockfd, void *buf, int max_size) {
     return len;
 }
 
-
+/*
+ * Close a socket fd
+ */
+void CloseSocket(int sockfd) {
+    close(sockfd);
+}
