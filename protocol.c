@@ -84,6 +84,7 @@ int AnalyseMsg(void *buf, int *cmd_code, void *data1, int *size1, void *data2, i
             memcpy(data1, buf + sizeof(int) * 2, *size1);
             memcpy(size2, buf + sizeof(int) * 2 + *size1, sizeof(int));
             memcpy(data2, buf + sizeof(int) * 3 + *size1, *size2);
+            // printf("A d2 %s\n", data2);
             break;
     }
     return 0;

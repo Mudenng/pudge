@@ -23,6 +23,8 @@
 
 #include <arpa/inet.h>
 
+#define MAX_CONNS 1024
+
 /*
  * Init server
  * input    : address, port, max_connects_num
