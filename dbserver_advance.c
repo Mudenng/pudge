@@ -31,7 +31,7 @@
 #include <semaphore.h>
 
 
-#define ADDR "127.0.0.1"
+#define ADDR "10.0.2.15"
 #define PORT 9999
 #define MAX_CONNECTS 100
 #define BUFFER_SIZE 1000
@@ -41,9 +41,8 @@
 #define THREADS 3
 
 #define RANDOM(x)                   \
-        srand((unsigned)time(0));   \
         rand_id = random()%x;
-
+// srand((unsigned)time(0));   
 
 HASHTABLE db_handle_table;
 HASHTABLE db_name_table;
@@ -64,6 +63,10 @@ typedef struct {
     int size1;
     int size2;
 }MESSAGE;
+
+typedef struct {
+    int tid;
+}THREAD_ARGV;
 
 sem_t sem[THREADS];
 
@@ -134,7 +137,7 @@ void RequestConduct(void *arg) {
             free(dbname);
             free(arg);
             break;
-            case EXIT:
+        case EXIT:
             HashDelete(db_name_table, &client_sockfd);
             HashGetValue(db_handle_table, dbname, &dhn);
             dhn.used--;
@@ -228,33 +231,40 @@ void RequestConduct(void *arg) {
 
 void Thread_DB(void *arg) {
     pthread_t pt = pthread_self();
-    //int tid = 0;
-    long long tid = (long long)pt;
-    int key = tid % THREADS;
+    int tid = ((THREAD_ARGV *)arg)->tid;
+    long long hashkey = (long long)pt;
+    printf("thread %d ready\n", tid);
     while(1) {
-        sem_wait(&sem[key]);
+        sem_wait(&sem[tid]);
         // printf("thread %d wake up\n", tid);
         MESSAGE *msg;
-        while(HashGetValue(thread_msg_table, &key, &msg) != 0) {
+        while(HashGetValue(thread_msg_table, &tid, &msg) != 0) {
             // printf("t msg = %ld\n", (long)msg);
-            HashDelete(thread_msg_table, &key);
+            HashDelete(thread_msg_table, &tid);
             // char buffer[BUFFER_SIZE];
             // memcpy(buffer, msg->data2, msg->size2);
             // buffer[msg->size2] = '\0';
             // printf("msg->data2 : %s\n", buffer);
             RequestConduct(msg);
-            printf("Thread %d handled.\n", key);
+            printf("Thread %d handled.\n", tid);
         }
     }
+}
+
+unsigned int my_hash(const char *key) {
+    return *(int *)key;
 }
 
 int main() {
     int server_sockfd = InitializeServer(ADDR, PORT, MAX_CONNECTS);
     int client_sockfd = -1;
+        // db_handle_table = CreateTablePJW(2, DBNAME_SIZE, sizeof(DB_HANDLE_NODE));
+        // thread_msg_table = CreateTablePJW(THREADS, sizeof(int), sizeof(MESSAGE *));
+        // db_name_table = CreateTablePJW(10, sizeof(int), DBNAME_SIZE);
+    db_handle_table = CreateTablePJW(5, DBNAME_SIZE, sizeof(DB_HANDLE_NODE));
+    thread_msg_table = CreateTable(THREADS, sizeof(int), sizeof(MESSAGE *), my_hash);    
+    db_name_table = CreateTablePJW(5, sizeof(int), DBNAME_SIZE);
     if (server_sockfd != -1) {
-        db_handle_table = CreateTablePJW(10, DBNAME_SIZE, sizeof(DB_HANDLE_NODE));
-        db_name_table = CreateTablePJW(10, sizeof(int), DBNAME_SIZE);
-        thread_msg_table = CreateTablePJW(THREADS, sizeof(int), sizeof(MESSAGE *));
         // init signal
         int i;
         for(i = 0; i < THREADS; ++i)
@@ -262,37 +272,40 @@ int main() {
         // init threads
         pthread_t tid[THREADS];
         for(i = 0; i < THREADS; ++i) {
-            pthread_create(&tid[i], NULL, (void *)Thread_DB, NULL);
+	    THREAD_ARGV *argv = (THREAD_ARGV *)malloc(sizeof(THREAD_ARGV));
+	    argv->tid = i;
+            pthread_create(&tid[i], NULL, (void *)Thread_DB, argv);
             printf("thread %d started\n", i);
         }
 
         while(1) {
+	    printf("enter loop.\n");
             client_sockfd = ClientRequest(server_sockfd);
+	    printf("receive client request.\n");
             char buffer[BUFFER_SIZE];
             char data1[BUFFER_SIZE];
             char data2[BUFFER_SIZE];
             int cmd_code;
             int size1;
             int size2;
-            while(1) {
-                int len = RecvMsg(client_sockfd, &buffer, BUFFER_SIZE);
-                AnalyseMsg(buffer, &cmd_code, data1, &size1, data2, &size2);
-                MESSAGE *msg = (MESSAGE *)malloc(sizeof(MESSAGE));
-                msg->sockfd = client_sockfd;
-                msg->cmd_code = cmd_code;
-                msg->data1 = data1;
-                msg->data2 = data2;
-                msg->size1 = size1;
-                msg->size2 = size2;
-                // printf("msg->data 2 : %s\n", msg->data2);
-                // printf("main msg = %ld\n", (long)msg);
-                // int id = 0;
-                int rand_id;
-                RANDOM(THREADS);
-                int key = (long long)tid[rand_id] % THREADS;
-                HashAddNode(thread_msg_table, &key, &msg);
-                sem_post(&sem[key]);
-            }
+            int len = RecvMsg(client_sockfd, &buffer, BUFFER_SIZE);
+            AnalyseMsg(buffer, &cmd_code, data1, &size1, data2, &size2);
+            MESSAGE *msg = (MESSAGE *)malloc(sizeof(MESSAGE));
+            msg->sockfd = client_sockfd;
+            msg->cmd_code = cmd_code;
+            msg->data1 = data1;
+            msg->data2 = data2;
+            msg->size1 = size1;
+            msg->size2 = size2;
+            // printf("msg->data 2 : %s\n", msg->data2);
+            // printf("main msg = %ld\n", (long)msg);
+            // int id = 0;
+            int rand_id;
+            RANDOM(THREADS);
+	    printf("rand %d\n", rand_id);
+            int hashkey = (long long)tid[rand_id];
+            HashAddNode(thread_msg_table, &rand_id, &msg);
+            sem_post(&sem[rand_id]);
         }
     }
 

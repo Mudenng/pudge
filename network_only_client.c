@@ -18,37 +18,13 @@
  *
  */
 
-#include "network.h"
+#include "network_only_client.h"
 
 #include <arpa/inet.h>
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <sys/epoll.h>
-#include <fcntl.h>
-
-int efd;
-
-/*
- * Make a sockfd non_blocking
- */
-int make_socket_non_blocking (int fd) {
-    int opts;
-    opts = fcntl(fd,F_GETFL);
-    if(opts < 0)
-    {
-        fprintf(stderr,"fcntl(sock,GETFL) Error,%s:%d\n", __FILE__,__LINE__);
-        exit(1);
-    }
-    /* set non blocking */
-    opts = opts|O_NONBLOCK;
-    if(fcntl(fd,F_SETFL,opts) < 0)
-    {
-        fprintf(stderr,"fcntl(sock,SETFL,opts) Error,%s:%d\n", __FILE__,__LINE__);
-        exit(1);
-    }    
-}
 
 /*
  * Create socket
@@ -67,7 +43,6 @@ int PrepareSocket() {
  * Init server address , bind socket, listen
  */
 int InitServer(int sockfd, char *ip, int port, int max_conn) {
-    struct epoll_event event;
 	struct sockaddr_in addr;
 	memset(&addr, 0, sizeof(struct sockaddr_in));
 	addr.sin_family = AF_INET;
@@ -75,12 +50,6 @@ int InitServer(int sockfd, char *ip, int port, int max_conn) {
 	addr.sin_addr.s_addr = inet_addr(ip);
 	memset(&addr.sin_zero, 0, 8);
 
-    // init epoll
-    efd = epoll_create(MAX_CONNS);
-    make_socket_non_blocking(sockfd);
-    event.data.fd = sockfd;
-    event.events = EPOLLIN | EPOLLRDHUP;
-    epoll_ctl(efd, EPOLL_CTL_ADD, sockfd, &event);
 
 	// bind 
 	if ( bind(sockfd, (struct sockaddr *)&addr, sizeof(struct sockaddr) ) < 0 ) {
@@ -122,38 +91,6 @@ int WaitClient(int server_sockfd, struct sockaddr_in *client_addr, int *sin_size
 	return client_sockfd;
 }
 
-int ClientRequest(int server_sockfd) {
-    while(1) {
-        struct epoll_event event;
-        int fdnum = epoll_wait(efd, &event, 1, -1);
-        if(event.data.fd == server_sockfd) {
-            struct sockaddr_in clientaddr;
-            socklen_t addr_len = sizeof(struct sockaddr);
-            int newfd = accept(server_sockfd, (struct sockaddr *)&clientaddr, &addr_len);
-            if(newfd == -1) {
-		        printf("accept error.\n");
-            }
-	        printf("accept client - %s\n", inet_ntoa(clientaddr.sin_addr));
-
-	        // send welcome message to client
-	        int len = SendMsg(newfd, "Welcome to this server!\n", 24);
-	        if (len < 0) {
-		        printf("send welcome error.\n");
-	        }
-            make_socket_non_blocking(newfd);
-            event.data.fd = newfd;
-            event.events = EPOLLIN;
-            epoll_ctl(efd, EPOLL_CTL_ADD, newfd, &event);
-        }
-        
-        else if((event.events & EPOLLIN) && (event.events & EPOLLRDHUP)) {
-            close(event.data.fd);
-        }
-        else {
-            return event.data.fd;
-        }
-    }
-}
 
 /*
  * Init server
