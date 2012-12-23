@@ -139,18 +139,19 @@ void RequestConduct(void *arg) {
             free(arg);
             break;
         case EXIT:
-            HashGetValue(db_name_table, &client_sockfd, dbname);
-            HashDelete(db_name_table, &client_sockfd);
-            HashGetValue(db_handle_table, dbname, &dhn);
-            dhn.links--;
-            if (dhn.links <= 0) {
-                HashGetValue(db_handle_table, dbname, &db);
-                CloseHDB(db);
-                HashDelete(db_handle_table, dbname);
-            }
-            else {
-                HashDelete(db_handle_table, dbname);
-                HashAddNode(db_handle_table, dbname, &dhn);
+            if ( HashGetValue(db_name_table, &client_sockfd, dbname) != 0) {
+                HashDelete(db_name_table, &client_sockfd);
+                HashGetValue(db_handle_table, dbname, &dhn);
+                dhn.links--;
+                if (dhn.links <= 0) {
+                    HashGetValue(db_handle_table, dbname, &db);
+                    CloseHDB(db);
+                    HashDelete(db_handle_table, dbname);
+                }
+                else {
+                    HashDelete(db_handle_table, dbname);
+                    HashAddNode(db_handle_table, dbname, &dhn);
+                }
             }
             db = NULL;
             CloseSocket(client_sockfd);
@@ -249,6 +250,10 @@ void Thread_DB(void *arg) {
             printf("Thread %d handled.\n", tid);
         }
     }
+}
+
+void Thread_ServerConsole(void *arg) {
+    
 }
 
 void recv_callback_fn(int sockfd, short event, void *arg) {

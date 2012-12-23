@@ -158,7 +158,6 @@ void ExecCommand(char *command) {
     else if ( CommandMatching(command, "exit") == 0 ) {
         CreateMsg0(buffer, &send_size, EXIT);
         SendMsg(sockfd, buffer, send_size);
-        sleep(2);
         CloseSocket(sockfd);
         exit(0);
     }
