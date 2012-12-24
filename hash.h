@@ -13,13 +13,15 @@ typedef char* HASHTABLE;
 typedef char* NODE_PTR;
 typedef unsigned int (*HASH_FUN)(const char *key);
 
-HASHTABLE CreateTable(int length, int key_size, int val_size, HASH_FUN hashfun);
+HASHTABLE HashCreateTable(int length, int key_size, int val_size, HASH_FUN hashfun);
 
-#define CreateTablePJW(length, key_size, val_size) CreateTable(length, key_size, val_size, HashPJW)
+#define HashCreateTablePJW(length, key_size, val_size) HashCreateTable(length, key_size, val_size, HashPJW)
 
-int InsertNode_tail(HASHTABLE table, void *key, void *val); 
+int HashDestroyTable(HASHTABLE table);
 
-#define HashAddNode(table, key, val) InsertNode_tail(table, key, val)
+int HashAddNode_tail(HASHTABLE table, void *key, void *val); 
+
+int HashAddNode(HASHTABLE table, void *key, void *val);
 
 int HashGetValue(HASHTABLE table, void *key, void *buf);
 

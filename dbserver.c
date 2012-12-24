@@ -78,6 +78,7 @@ void RequestConduct(void *arg) {
     int size1 = ((MESSAGE *)arg)->size1;
     int size2 = ((MESSAGE *)arg)->size2;
     char buffer2[BUFFER_SIZE];
+    free(arg);
     // memcpy(buffer2, data2, size2);
     // buffer2[size2] = '\0';
     // printf("arg->data2 : %s\n", buffer2);
@@ -114,7 +115,6 @@ void RequestConduct(void *arg) {
             SendMsg(client_sockfd, buffer, back_size);
             printf("handled 'OPEN %s' from %d\n", data1, client_sockfd);
             free(dbname);
-            free(arg);
             break;
         case CLOSE:
             HashGetValue(db_name_table, &client_sockfd, dbname);
@@ -136,7 +136,6 @@ void RequestConduct(void *arg) {
             SendMsg(client_sockfd, buffer, back_size);
             printf("handled 'CLOSE' from %d\n", client_sockfd);
             free(dbname);
-            free(arg);
             break;
         case EXIT:
             if ( HashGetValue(db_name_table, &client_sockfd, dbname) != 0) {
@@ -158,7 +157,6 @@ void RequestConduct(void *arg) {
             printf("handled 'EXIT' from %d\n", client_sockfd);
             printf("client %d disconnected.\n", client_sockfd);
             free(dbname);
-            free(arg);
             break;
         case PUT:
             HashGetValue(db_name_table, &client_sockfd, dbname);
@@ -183,7 +181,6 @@ void RequestConduct(void *arg) {
             }
             SendMsg(client_sockfd, buffer, back_size);
             free(dbname);
-            free(arg);
             break;
         case GET:
             HashGetValue(db_name_table, &client_sockfd, dbname);
@@ -206,7 +203,6 @@ void RequestConduct(void *arg) {
             }
             SendMsg(client_sockfd, buffer, back_size);
             free(dbname);
-            free(arg);
             break;
         case DELETE:
             HashGetValue(db_name_table, &client_sockfd, dbname);
@@ -226,7 +222,6 @@ void RequestConduct(void *arg) {
             }
             SendMsg(client_sockfd, buffer, back_size);
             free(dbname);
-            free(arg);
             break;
     }
 }
@@ -234,6 +229,7 @@ void RequestConduct(void *arg) {
 void Thread_DB(void *arg) {
     pthread_t pt = pthread_self();
     int tid = ((THREAD_ARG *)arg)->tid;
+    free(arg);
     printf("Thread %d ready\n", tid);
     while(1) {
         sem_t *sem;
@@ -277,7 +273,7 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
     msg->size2 = size2;
     int rand_id;
     RANDOM(THREADS);
-    HashAddNode(thread_msg_table, &rand_id, &msg);
+    HashAddNode_tail(thread_msg_table, &rand_id, &msg);
     sem_t *sem;
     char sem_name[10];
     sprintf(sem_name, "%d", rand_id);
@@ -302,9 +298,9 @@ int main() {
     pthread_create(&socket_thread, NULL, (void *)StartServer, &sarg);
 
     // init some structs
-    db_handle_table = CreateTablePJW(5, DBNAME_SIZE, sizeof(DB_HANDLE_NODE));
-    thread_msg_table = CreateTable(THREADS, sizeof(int), sizeof(MESSAGE *), my_hash);    
-    db_name_table = CreateTablePJW(5, sizeof(int), DBNAME_SIZE);
+    db_handle_table = HashCreateTablePJW(5, DBNAME_SIZE, sizeof(DB_HANDLE_NODE));
+    thread_msg_table = HashCreateTable(THREADS, sizeof(int), sizeof(MESSAGE *), my_hash);    
+    db_name_table = HashCreateTablePJW(5, sizeof(int), DBNAME_SIZE);
 
     // init signal
     int i;
@@ -325,7 +321,9 @@ int main() {
         printf("thread %d started\n", i);
     }
 
-    pthread_join(socket_thread, NULL);
+    int server_sockfd;
+    pthread_join(socket_thread, (void *)&server_sockfd);
+    CloseSocket(server_sockfd);
     return 0;
 }
 
