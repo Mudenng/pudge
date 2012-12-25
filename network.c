@@ -11,12 +11,6 @@
 /*  DESCRIPTION           :  Interface to socket operation          */
 /********************************************************************/
 
-/*
- * Revision log:
- *
- * Created by Pudge Group,2012/12/14
- *
- */
 
 #include "network.h"
 
@@ -75,7 +69,7 @@ int InitServer(int sockfd, char *ip, int port, int max_conn) {
 }
 
 /*
- * Accept callback function
+ * Accept client callback function
  */
 void AcceptHandle(int server_sockfd, short event, void *arg) {
     callback_arg *callarg = (callback_arg *)arg;
@@ -104,7 +98,7 @@ void AcceptHandle(int server_sockfd, short event, void *arg) {
 }
 
 /*
- * Init server
+ * Start server init event, and wait client
  */
 int StartServer(void *arg) {
     char *ip = ((SERVER_START_ARG *)arg)->ip;

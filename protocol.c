@@ -11,12 +11,6 @@
 /*  DESCRIPTION           :  protocol between server and client     */
 /********************************************************************/
 
-/*
- * Revision log:
- *
- * Created by Pudge Group,2012/12/14
- *
- */
 
 #include "protocol.h"
 #include <stdlib.h>

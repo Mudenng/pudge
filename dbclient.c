@@ -15,6 +15,7 @@
  * Revision log:
  *
  * Client, created by Pudge Group, 2012/12/14
+ * Fix some bugs, lei, 2012/12/21
  *
  */
 

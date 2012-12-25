@@ -34,8 +34,8 @@ typedef struct {
 }SERVER_START_ARG;
 
 /*
- * Init server
- * input    : address, port, max_connects_num
+ * Start server, init event and wait client 
+ * input    : ip, port, max_conn, recv_callback_fn
  * output   : server_sockfd
  * in/out   : None
  * return   : if SUCCESS return server_sockfd

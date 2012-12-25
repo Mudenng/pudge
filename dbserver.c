@@ -11,12 +11,6 @@
 /*  DESCRIPTION           :  Server of key-value database           */
 /********************************************************************/
 
-/*
- * Revision log:
- *
- * Server, created by Pudge Group, 2012/12/14
- *
- */
 
 #include "hdbapi.h"
 #include "network.h"
@@ -68,8 +62,9 @@ typedef struct {
     int tid;
 }THREAD_ARG;
 
-// sem_t sem[THREADS];
-
+/*
+ * Handle the client request and return message
+ */
 void RequestConduct(void *arg) {
     int client_sockfd = ((MESSAGE *)arg)->sockfd;
     int cmd_code = ((MESSAGE *)arg)->cmd_code;
@@ -226,6 +221,9 @@ void RequestConduct(void *arg) {
     }
 }
 
+/*
+ * Tread function, get task from queue and hanle it
+ */
 void Thread_DB(void *arg) {
     pthread_t pt = pthread_self();
     int tid = ((THREAD_ARG *)arg)->tid;
@@ -248,10 +246,16 @@ void Thread_DB(void *arg) {
     }
 }
 
+/*
+ * Server console thread
+ */
 void Thread_ServerConsole(void *arg) {
     
 }
 
+/*
+ * Client request event callback function, assign task to a random thread
+ */
 void recv_callback_fn(int sockfd, short event, void *arg) {
     printf("Receive client request\n");
     char buffer[BUFFER_SIZE];
@@ -282,6 +286,7 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
     // sem_post(&sem[rand_id]);
     printf("Start handle DB request\n");
 }
+
 
 unsigned int my_hash(const char *key) {
     return *(int *)key;
@@ -321,9 +326,14 @@ int main() {
         printf("thread %d started\n", i);
     }
 
+    // close server
     int server_sockfd;
     pthread_join(socket_thread, (void *)&server_sockfd);
     CloseSocket(server_sockfd);
+    HashDestroyTable(db_handle_table);
+    HashDestroyTable(thread_msg_table);
+    HashDestroyTable(db_name_table);
+    printf("Server stoped.\n");
     return 0;
 }
 

@@ -1,8 +1,25 @@
+/********************************************************************/
+/* Copyright (C) SSE-USTC, 2012                                     */
+/*                                                                  */
+/*  FILE NAME             :  hash.c                                 */
+/*  PRINCIPAL AUTHOR      :  lei                                    */
+/*  SUBSYSTEM NAME        :  base structs                           */
+/*  MODULE NAME           :  hash table                             */
+/*  LANGUAGE              :  C                                      */
+/*  TARGET ENVIRONMENT    :  Any                                    */
+/*  DATE OF FIRST RELEASE :  2012/12/01                             */
+/*  DESCRIPTION           :  General hash table                     */
+/********************************************************************/
+
+
 #include "hash.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * Default hash function
+ */
 unsigned int HashPJW (const char *datum) {
     unsigned int hash_value, i;
 
@@ -16,6 +33,9 @@ unsigned int HashPJW (const char *datum) {
 	return ( hash_value );
 }
 
+/*
+ * Create hash table
+ */
 HASHTABLE HashCreateTable(int length, int key_size, int val_size, HASH_FUN hashfun) {
     HASHTABLE newtable= (HASHTABLE)malloc(sizeof(int) * 3 + sizeof(NODE_PTR) * length);
     memcpy(newtable, &length, sizeof(int)); 
@@ -26,6 +46,9 @@ HASHTABLE HashCreateTable(int length, int key_size, int val_size, HASH_FUN hashf
     return newtable;
 }
 
+/*
+ * Get first node pointer using index
+ */
 NODE_PTR GetNodePtr(HASHTABLE table, int index) {
     int length = *(int *)table;
     NODE_PTR ptr;
@@ -37,12 +60,18 @@ NODE_PTR GetNodePtr(HASHTABLE table, int index) {
     return ptr;
 }
 
+/*
+ * Get next node pointer
+ */
 NODE_PTR GetNextPtr(NODE_PTR curr) {
     NODE_PTR next;
     memcpy(&next, curr, sizeof(NODE_PTR));
     return next;
 }
 
+/*
+ * Insert a node on head
+ */
 int HashAddNode(HASHTABLE table, void *key, void *val) {
     int length = *(int *)(table);
     int key_size = *(int *)(table + sizeof(int));
@@ -74,6 +103,9 @@ int HashAddNode(HASHTABLE table, void *key, void *val) {
     return 0;
 }
 
+/*
+ * Insert a node on tail
+ */
 int HashAddNode_tail(HASHTABLE table, void *key, void *val) {
     int length = *(int *)(table);
     int key_size = *(int *)(table + sizeof(int));
@@ -107,6 +139,9 @@ int HashAddNode_tail(HASHTABLE table, void *key, void *val) {
     return 0;
 }
 
+/*
+ * Get value by key
+ */
 int HashGetValue(HASHTABLE table, void *key, void *buf) {
     int length = *(int *)(table);
     int key_size = *(int *)(table + sizeof(int));
@@ -130,6 +165,9 @@ int HashGetValue(HASHTABLE table, void *key, void *buf) {
     return val_size;
 }
 
+/*
+ * Delete key-value
+ */
 int HashDelete(HASHTABLE table, void *key) {
     int length = *(int *)(table);
     int key_size = *(int *)(table + sizeof(int));
@@ -142,11 +180,11 @@ int HashDelete(HASHTABLE table, void *key) {
     free(tempkey);
     NODE_PTR nptr = GetNodePtr(table, index);
     if (nptr == NULL)
-        return 0;
+        return -1;
     else if (memcmp(nptr + sizeof(NODE_PTR), key, key_size) == 0) {
         memcpy(table + HEAD_SIZE + sizeof(NODE_PTR) * index, nptr, sizeof(NODE_PTR));
         free(nptr);
-        return 1;
+        return 0;
     }
     else {
         NODE_PTR prev = nptr;
@@ -156,15 +194,20 @@ int HashDelete(HASHTABLE table, void *key) {
             nptr = GetNextPtr(nptr);
         }
         if (nptr == NULL)
-            return 0;
+            return -1;
         memcpy(prev, nptr, sizeof(NODE_PTR));
         free(nptr);
-        return 1;
+        return 0;
     }
     
 }
 
+/*
+ * Destroy hash table
+ */
 int HashDestroyTable(HASHTABLE table) {
+    if (table == NULL)
+        return -1;
     int length = *(int *)table;
     int i;
     for(i = 0; i < length; ++i) {
