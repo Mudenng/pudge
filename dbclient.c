@@ -40,13 +40,20 @@
         printf(" 'exit'          - Exit\n");                        \
         printf("-------------------------------------------\n");
 
-#define ADDR "127.0.0.1"
-#define PORT 9999
+//#define ADDR "127.0.0.1"
+//#define PORT 9999
 #define BUFFER_SIZE 1000
+#define SERVER_NUM 3 
 
+typedef struct {
+    char addr[50];
+    int port;
+    int sockfd;
+}server_link;
 
 char DBName[BUFFER_SIZE] = "\0";
-int sockfd = -1;
+//int sockfd = -1;
+server_link servers[SERVER_NUM];
 
 int CommandMatching(char *command, char *pattern) {
     regex_t reg;
@@ -71,32 +78,35 @@ void ExecCommand(char *command) {
     int size2;
     int back_size;
     int send_size;
+    int i;
 
     if ( CommandMatching(command, "\\?") == 0 ) {
         HELP_INFO();
     } 
+    // OPEN
     else if ( CommandMatching(command, "open( +|\\t).+\\.hdb$") == 0 ) {
         if (strlen(DBName) != 0) {
             printf("Close current data file '%s' first.\n", DBName);
         }
         else {
             sscanf(command, "open %s", DBName);
-            CreateMsg1(buffer, &send_size, OPEN, DBName, strlen(DBName));
-            SendMsg(sockfd, buffer, send_size);
-            back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
-            AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
-            if (back_code == OPEN_OK) {
-                printf("Open successfully.\n");
+            for(i = 0; i < SERVER_NUM; ++i) {
+                CreateMsg1(buffer, &send_size, OPEN, DBName, strlen(DBName));
+                SendMsg(servers[i].sockfd, buffer, send_size);
+                back_size = RecvMsg(servers[i].sockfd, buffer, BUFFER_SIZE);
+                AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
+                if (back_code == ERROR) {
+                    printf("Open failed. Try again.\n");
+                    return;
+                }
             }
-            else if (back_code == ERROR) {
-                printf("Open failed. Try again.\n");
-                DBName[0] = '\0';
-            }
+            printf("Open successfully.\n");
         }
     }
     else if ( DBName[0] == '\0' && CommandMatching(command, "put|get|delete|close") == 0 ) {
         printf("Open a data file first!\n");
     }
+    // PUT
     else if ( CommandMatching(command, "put( +|\\t)[0-9]+( +|\\t).+") == 0 ) {
         int key;
         char p[BUFFER_SIZE] = "\0";
@@ -105,8 +115,8 @@ void ExecCommand(char *command) {
         char *l = strstr(command, p);
         strcpy(temp, l);
         CreateMsg2(buffer, &send_size, PUT, &key, sizeof(int), temp, strlen(temp));
-        SendMsg(sockfd, buffer, send_size);
-        back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
+        SendMsg(servers[key % SERVER_NUM].sockfd, buffer, send_size);
+        back_size = RecvMsg(servers[key % SERVER_NUM].sockfd, buffer, BUFFER_SIZE);
         AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
         if (back_code == PUT_OK) {
             printf("Put Successfully.\n");
@@ -115,13 +125,17 @@ void ExecCommand(char *command) {
             printf("Put failed. \n");
         }
     }
+    // GET
     else if ( CommandMatching(command, "get( +|\\t)[0-9]+$") == 0 ) {
         int key;
         sscanf(command, "get %d", &key);
         CreateMsg1(buffer, &send_size, GET, &key, sizeof(int));
-        SendMsg(sockfd, buffer, send_size);
-        back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
+        SendMsg(servers[key % SERVER_NUM].sockfd, buffer, send_size);
+        printf("0\n");
+        back_size = RecvMsg(servers[key % SERVER_NUM].sockfd, buffer, BUFFER_SIZE);
+        printf("1\n");
         AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
+        printf("2\n");
         if (back_code == GET_OK) {
             data1[size1] = '\0';
             printf("record: %d -> %s\n", key, data1);
@@ -130,12 +144,13 @@ void ExecCommand(char *command) {
             printf("Can't find record key = %d .\n", key);
         }
     }
+    // DELETE
     else if ( CommandMatching(command, "delete( +|\\t)[0-9]+$") == 0 ) {
         int key = -1;
         sscanf(command, "delete %d", &key);
         CreateMsg1(buffer, &send_size, DELETE, &key, sizeof(int));
-        SendMsg(sockfd, buffer, send_size);
-        back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
+        SendMsg(servers[key % SERVER_NUM].sockfd, buffer, send_size);
+        back_size = RecvMsg(servers[key % SERVER_NUM].sockfd, buffer, BUFFER_SIZE);
         AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
         if (back_code == DELETE_OK) {
             printf("Delete record key = %d successfully.\n", key);
@@ -144,37 +159,57 @@ void ExecCommand(char *command) {
             printf("Delete failed.\n");
         }
     }
+    // CLOSE
     else if ( CommandMatching(command, "close") == 0 ) {
-        if (DBName[0] != '\0') {
+        for(i = 0; i < SERVER_NUM; ++i) {
             CreateMsg0(buffer, &send_size, CLOSE);
-            SendMsg(sockfd, buffer, send_size);
-            back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
+            SendMsg(servers[i].sockfd, buffer, send_size);
+            back_size = RecvMsg(servers[i].sockfd, buffer, BUFFER_SIZE);
             AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
-            if (back_code == CLOSE_OK) {
-                printf("Close successfully.\n");
-            }
-            DBName[0] = '\0';
         }
+        DBName[0] = '\0';
+        printf("Close successfully.\n");
     }
+    // EXIT
     else if ( CommandMatching(command, "exit") == 0 ) {
-        CreateMsg0(buffer, &send_size, EXIT);
-        SendMsg(sockfd, buffer, send_size);
-        CloseSocket(sockfd);
+        for(i = 0; i < SERVER_NUM; ++i) {
+            CreateMsg0(buffer, &send_size, EXIT);
+            SendMsg(servers[i].sockfd, buffer, send_size);
+            CloseSocket(servers[i].sockfd);
+        }
         exit(0);
     }
+    // else
     else {
         printf("Wrong Command, try again.\n");
     }
 }
 
 int main() {
-    char buffer[BUFFER_SIZE];
-    // init
-    sockfd = InitializeClient(ADDR, PORT);
+    char line[BUFFER_SIZE];
+    FILE *fp;
+    if ( (fp = fopen("client.conf","r")) == NULL ) {
+        printf("Open configure file error.\n");
+        exit(-1);
+    }
+    int i = 0;
+    while (fgets(line,BUFFER_SIZE, fp) && i < SERVER_NUM) {
+        sscanf(line, "%s %d", servers[i].addr, &servers[i].port);
+        ++i;
+    }
+
+    // init socket
+    for(i = 0; i < SERVER_NUM; ++i) {
+        servers[i].sockfd = InitializeClient(servers[i].addr, servers[i].port);
+    }
+
 	// receive welcome message from the server
-	int len = RecvMsg(sockfd, &buffer, BUFFER_SIZE);
-	buffer[len] = '\0';
-	printf("%s", buffer);
+    char buffer[BUFFER_SIZE];
+    for(i = 0; i < SERVER_NUM; ++i) {
+        int len = RecvMsg(servers[i].sockfd, &buffer, BUFFER_SIZE);
+        buffer[len] = '\0';
+        printf("Server(%s:%d) returns: %s",servers[i].addr, servers[i].port, buffer);
+    }
 
     char cmdbuf[BUFFER_SIZE];
     HELP_INFO();

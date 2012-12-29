@@ -27,6 +27,8 @@
 
 #define ADDR "127.0.0.1"
 #define PORT 9999
+#define SEM_NAME_FORM "S0 %d"
+
 #define MAX_CONNECTS 100
 #define BUFFER_SIZE 1000
 
@@ -62,6 +64,8 @@ typedef struct {
     int tid;
 }THREAD_ARG;
 
+pthread_mutex_t dbmutex;
+
 /*
  * Handle the client request and return message
  */
@@ -88,6 +92,7 @@ void RequestConduct(void *arg) {
             memset(dbname, 0, DBNAME_SIZE);
             memcpy(dbname, data1, size1);
             HashAddNode(db_name_table, &client_sockfd, dbname);
+            pthread_mutex_lock(&dbmutex);
             if (HashGetValue(db_handle_table, dbname, &dhn) == 0) {
                 db = OpenHDB(data1);
                 if (db != NULL) {
@@ -107,6 +112,7 @@ void RequestConduct(void *arg) {
                 HashAddNode(db_handle_table, dbname, &dhn);
                 CreateMsg0(buffer, &back_size, OPEN_OK);
             }
+            pthread_mutex_unlock(&dbmutex);
             SendMsg(client_sockfd, buffer, back_size);
             printf("handled 'OPEN %s' from %d\n", data1, client_sockfd);
             free(dbname);
@@ -114,6 +120,7 @@ void RequestConduct(void *arg) {
         case CLOSE:
             HashGetValue(db_name_table, &client_sockfd, dbname);
             HashDelete(db_name_table, &client_sockfd);
+            pthread_mutex_lock(&dbmutex);
             HashGetValue(db_handle_table, dbname, &dhn);
             dhn.links--;
             if (dhn.links <= 0) {
@@ -125,6 +132,7 @@ void RequestConduct(void *arg) {
                 HashDelete(db_handle_table, dbname);
                 HashAddNode(db_handle_table, dbname, &dhn);
             }
+            pthread_mutex_unlock(&dbmutex);
             db = NULL;
             memset(dbname, 0, DBNAME_SIZE);
             CreateMsg0(buffer, &back_size, CLOSE_OK);
@@ -135,6 +143,7 @@ void RequestConduct(void *arg) {
         case EXIT:
             if ( HashGetValue(db_name_table, &client_sockfd, dbname) != 0) {
                 HashDelete(db_name_table, &client_sockfd);
+                pthread_mutex_lock(&dbmutex);
                 HashGetValue(db_handle_table, dbname, &dhn);
                 dhn.links--;
                 if (dhn.links <= 0) {
@@ -146,6 +155,7 @@ void RequestConduct(void *arg) {
                     HashDelete(db_handle_table, dbname);
                     HashAddNode(db_handle_table, dbname, &dhn);
                 }
+                pthread_mutex_unlock(&dbmutex);
             }
             db = NULL;
             CloseSocket(client_sockfd);
@@ -232,7 +242,7 @@ void Thread_DB(void *arg) {
     while(1) {
         sem_t *sem;
         char sem_name[10];
-        sprintf(sem_name, "%d", tid);
+        sprintf(sem_name, SEM_NAME_FORM, tid);
         sem = sem_open(sem_name, 0);
         sem_wait(sem);
         // sem_wait(&sem[tid]);
@@ -265,6 +275,7 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
     int size1;
     int size2;
     int len = RecvMsg(sockfd, &buffer, BUFFER_SIZE);
+    printf("test\n");
     if (len == -1)
         return;
     AnalyseMsg(buffer, &cmd_code, data1, &size1, data2, &size2);
@@ -280,7 +291,7 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
     HashAddNode_tail(thread_msg_table, &rand_id, &msg);
     sem_t *sem;
     char sem_name[10];
-    sprintf(sem_name, "%d", rand_id);
+    sprintf(sem_name, SEM_NAME_FORM, rand_id);
     sem = sem_open(sem_name, 0);
     sem_post(sem);
     // sem_post(&sem[rand_id]);
@@ -312,7 +323,7 @@ int main() {
     for(i = 0; i < THREADS; ++i) {
         sem_t *sem;
         char sem_name[10];
-        sprintf(sem_name, "%d", i);
+        sprintf(sem_name, SEM_NAME_FORM, i);
         sem = sem_open(sem_name, O_RDWR | O_CREAT, S_IRUSR|S_IWUSR, 0);
         // sem_init(&sem[i], 0, 0);
     }
@@ -325,6 +336,7 @@ int main() {
         pthread_create(&tid[i], NULL, (void *)Thread_DB, argv);
         printf("thread %d started\n", i);
     }
+    pthread_mutex_init(&dbmutex, NULL);
 
     // close server
     int server_sockfd;

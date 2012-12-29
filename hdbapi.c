@@ -37,7 +37,7 @@ DBHANDLE OpenHDB(char *path) {
     tchdbsetmutex(newhdb);
 
     // open the database
-    if ( !tchdbopen(newhdb, path, HDBOWRITER | HDBOCREAT) ) {
+    if ( !tchdbopen(newhdb, path, HDBOWRITER | HDBOCREAT | HDBONOLCK) ) {
         error_code = tchdbecode(newhdb);
         printf("Open hdb error: %s\n", tchdberrmsg(error_code));
         return NULL;
