@@ -15,6 +15,7 @@
  * Revision log:
  *
  * Created by Pudge Group,2012/12/14
+ * Add some functions,2013/01/05
  *
  */
 
@@ -61,6 +62,25 @@ int InitializeClient(char *ip, int port);
  * return   : None
  */
 void CloseSocket(int sockfd);
+
+/*
+ * Get a free port
+ * input    : None
+ * output   : None
+ * in/out   : None
+ * return   : a free port
+ */
+int get_free_port();
+
+/*
+ * Get IP using interface name
+ * input    : interface name
+ * output   : IP
+ * in/out   : None
+ * return   : if SUCCESS return 1
+ *          : if FAILURE return -1
+ */
+int get_local_ip(char *interface_name, char *ip);
 
 /*
  * Send a message

@@ -1,17 +1,21 @@
 # makefile for pudge
 
-TARGETS = server client test_hdbapi test_protocol test_networkserver test_networkclient
+TARGETS = server client master test_hdbapi test_protocol test_networkserver test_networkclient
 
 objects1 = dbserver.o hdbapi.o network.o protocol.o hash.o
 objects2 = dbclient.o network.o protocol.o
+objects3 = master.o network.o protocol.o linklist.o
 
-all: client server
+all: client server master
 
 server: $(objects1)
 	gcc -o server $(objects1) -ltokyocabinet -levent
 
 client: $(objects2)
 	gcc -o client $(objects2) -levent
+
+master: $(objects3)
+	gcc -o master $(objects3) -levent
 
 #test: test_hdbapi.o test_protocol.o test_networkserver.o test_networkclient.o hdbapi.o #protocol.o network.o
 #	gcc -o test_hdbapi test_hdbapi.o hdbapi.o -ltokyocabinet

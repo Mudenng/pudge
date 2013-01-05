@@ -25,9 +25,7 @@
 #include <semaphore.h>
 
 
-#define ADDR "127.0.0.1"
-#define PORT 9999
-#define SEM_NAME_FORM "S0 %d"
+#define SEM_NAME_FORM "%d %d"
 
 #define MAX_CONNECTS 100
 #define BUFFER_SIZE 1000
@@ -39,6 +37,7 @@
 #define RANDOM(x)                   \
         rand_id = random()%x;
 
+int myport;
 
 HASHTABLE db_handle_table;
 HASHTABLE db_name_table;
@@ -242,16 +241,16 @@ void Thread_DB(void *arg) {
     while(1) {
         sem_t *sem;
         char sem_name[10];
-        sprintf(sem_name, SEM_NAME_FORM, tid);
+        sprintf(sem_name, SEM_NAME_FORM, myport, tid);
         sem = sem_open(sem_name, 0);
         sem_wait(sem);
         // sem_wait(&sem[tid]);
-        printf("Thread %d wake up\n", tid);
+        // printf("Thread %d wake up\n", tid);
         MESSAGE *msg;
         while(HashGetValue(thread_msg_table, &tid, &msg) != 0) {
             HashDelete(thread_msg_table, &tid);
+            printf("Thread %d handling.\n", tid);
             RequestConduct(msg);
-            printf("Thread %d handled.\n", tid);
         }
     }
 }
@@ -267,7 +266,7 @@ void Thread_ServerConsole(void *arg) {
  * Client request event callback function, assign task to a random thread
  */
 void recv_callback_fn(int sockfd, short event, void *arg) {
-    printf("Receive client request\n");
+    // printf("Receive client request\n");
     char buffer[BUFFER_SIZE];
     char data1[BUFFER_SIZE];
     char data2[BUFFER_SIZE];
@@ -275,7 +274,6 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
     int size1;
     int size2;
     int len = RecvMsg(sockfd, &buffer, BUFFER_SIZE);
-    printf("test\n");
     if (len == -1)
         return;
     AnalyseMsg(buffer, &cmd_code, data1, &size1, data2, &size2);
@@ -291,11 +289,11 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
     HashAddNode_tail(thread_msg_table, &rand_id, &msg);
     sem_t *sem;
     char sem_name[10];
-    sprintf(sem_name, SEM_NAME_FORM, rand_id);
+    sprintf(sem_name, SEM_NAME_FORM, myport, rand_id);
     sem = sem_open(sem_name, 0);
     sem_post(sem);
     // sem_post(&sem[rand_id]);
-    printf("Start handle DB request\n");
+    // printf("Start handle DB request\n");
 }
 
 
@@ -304,14 +302,49 @@ unsigned int my_hash(const char *key) {
 }
 
 int main() {
+    // get ip
+    char interface_name[20];
+    char ip[INET_ADDRSTRLEN];
+    while(1) {
+        printf("Interface name: ");
+        scanf("%s", interface_name);
+        if (get_local_ip(interface_name, ip) == -1) {
+            printf("Get IP error, check Interface name.\n\n");
+            continue;
+        }
+        break;
+    }
+
+    // connect to master
+    char master_addr[ADDR_LEN];
+    int master_port;
+    int master_sockfd;
+    while(1) {
+        printf("Master Address: ");
+        scanf("%s", master_addr);
+        printf("Master Port: ");
+        scanf("%d", &master_port);
+        master_sockfd = InitializeClient(master_addr, master_port);
+        if (master_sockfd < 0) {
+            printf("Connect to Master failed, try again.\n\n");
+            continue;
+        }
+        break;
+    }
+    char buffer[BUFFER_SIZE];
+    int len = RecvMsg(master_sockfd, &buffer, BUFFER_SIZE);
+    memset(buffer, 0, BUFFER_SIZE);
+
     // start server main thread
+    myport = get_free_port();
     pthread_t socket_thread;
     SERVER_START_ARG sarg;
-    sarg.ip = ADDR;
-    sarg.port = PORT;
+    sarg.ip = ip;
+    sarg.port = myport;
     sarg.max_conn = MAX_CONNECTS;
     sarg.recv_callback_fn = recv_callback_fn;
     pthread_create(&socket_thread, NULL, (void *)StartServer, &sarg);
+    printf("Server start at %s:%d\n", ip, myport);
 
     // init some structs
     db_handle_table = HashCreateTablePJW(5, DBNAME_SIZE, sizeof(DB_HANDLE_NODE));
@@ -323,7 +356,7 @@ int main() {
     for(i = 0; i < THREADS; ++i) {
         sem_t *sem;
         char sem_name[10];
-        sprintf(sem_name, SEM_NAME_FORM, i);
+        sprintf(sem_name, SEM_NAME_FORM, myport, i);
         sem = sem_open(sem_name, O_RDWR | O_CREAT, S_IRUSR|S_IWUSR, 0);
         // sem_init(&sem[i], 0, 0);
     }
@@ -334,9 +367,26 @@ int main() {
         THREAD_ARG *argv = (THREAD_ARG *)malloc(sizeof(THREAD_ARG));
         argv->tid = i;
         pthread_create(&tid[i], NULL, (void *)Thread_DB, argv);
-        printf("thread %d started\n", i);
     }
     pthread_mutex_init(&dbmutex, NULL);
+
+    // tell master
+    SERVER_INFO this_server;
+    strncpy(this_server.addr, ip, ADDR_LEN);
+    this_server.port = myport;
+    int size1, size2, send_size, back_size, back_code;
+    char data1[BUFFER_SIZE];
+    char data2[BUFFER_SIZE];
+    CreateMsg1(buffer, &send_size, NEW_SERVER, &this_server, sizeof(SERVER_INFO));
+    SendMsg(master_sockfd, buffer, send_size);
+    back_size = RecvMsg(master_sockfd, buffer, BUFFER_SIZE);
+    AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
+    if (back_code != MASTER_OK) {
+        printf("Speak with Master error. Try again.\n");
+        exit(-1);
+    }
+
+    // CloseSocket(master_sockfd);
 
     // close server
     int server_sockfd;

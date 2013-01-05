@@ -16,6 +16,9 @@
 
 #include <event2/event.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -182,4 +185,69 @@ int RecvMsg(int sockfd, void *buf, int max_size) {
  */
 void CloseSocket(int sockfd) {
     close(sockfd);
+}
+
+/*
+ * Get a free port
+ */
+int get_free_port()
+{
+    int fd = -1;
+
+    struct sockaddr_in sin;
+    memset(&sin, 0, sizeof(sin));
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons(0);
+    sin.sin_addr.s_addr = htonl(INADDR_ANY);
+    
+    fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+    if(fd < 0){
+        printf("socket() error\n");
+         return -1;
+    }
+    
+    if(bind(fd, (struct sockaddr *)&sin, sizeof(sin)) != 0)
+    {
+        printf("bind() error\n");
+        close(fd);
+        return -1;
+    }
+
+    int len = sizeof(sin);
+    if(getsockname(fd, (struct sockaddr *)&sin, &len) != 0)
+    {
+        printf("getsockname() error\n");
+        close(fd);
+        return -1;
+    }
+
+    if(fd != -1)
+        close(fd);
+    
+    return sin.sin_port;
+}
+
+int get_local_ip(char *interface_name, char *ip) {
+    struct ifaddrs * ifAddrStruct = NULL;
+    void * tmpAddrPtr = NULL;
+
+    getifaddrs(&ifAddrStruct);
+
+    while (ifAddrStruct != NULL) {
+        // check it is IP4
+        if (ifAddrStruct->ifa_addr->sa_family == AF_INET) { 
+            // is a valid IP4 Address
+            tmpAddrPtr = &((struct sockaddr_in *)ifAddrStruct->ifa_addr)->sin_addr;
+            char addressBuffer[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+            if (strcmp(ifAddrStruct->ifa_name, interface_name) == 0) {
+                strncpy(ip, addressBuffer, INET_ADDRSTRLEN);
+                return 1;
+            }
+            // printf("%s IP Address %s\n", ifAddrStruct->ifa_name, addressBuffer); 
+        }   
+        ifAddrStruct=ifAddrStruct->ifa_next;
+    }
+    return -1;
 }

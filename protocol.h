@@ -35,7 +35,18 @@
 #define GET_OK -4
 #define DELETE_OK -5
 
+#define NEW_SERVER 100
+#define GET_SERVER_LIST 101
+#define SERVER_LIST_OK 102
+#define MASTER_OK 199
+
 #define ERROR 0
+
+#define ADDR_LEN 30
+typedef struct {
+    char addr[ADDR_LEN];
+    int port;
+}SERVER_INFO;
 
 /*
  * Create message - 0-2 data
