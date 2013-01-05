@@ -23,6 +23,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <fcntl.h>
 
 
 #define SEM_NAME_FORM "%d %d"

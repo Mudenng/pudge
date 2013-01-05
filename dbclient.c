@@ -211,6 +211,10 @@ int main() {
         exit(-1);
     }
     servers_cnt = *(int *)data1;
+    if (servers_cnt == 0) {
+        printf("No server avaliable.\n");
+        exit(-1);
+    }
     servers = (server_link *)malloc(servers_cnt * sizeof(server_link));
     int i;
     for(i = 0; i < servers_cnt; ++i) {
