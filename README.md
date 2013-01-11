@@ -4,5 +4,4 @@
 ##本项目为一个分布式key-value存储数据存储系统
   
 ##系统架构图
-![client](http://github.com/inccinf/pudge/raw/master/client.jpg)
-![server](http://github.com/inccinf/pudge/raw/master/server.jpg)
+![struct](http://github.com/inccinf/pudge/raw/master/doc/Architecture.png)

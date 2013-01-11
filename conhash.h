@@ -18,9 +18,9 @@
 #include <limits.h>
 
 #define BITS_IN_int     ( sizeof(int) * CHAR_BIT )
-#define THREE_QUARTERS	((int) ((BITS_IN_int * 3) / 4))
-#define ONE_EIGHTH		((int) (BITS_IN_int / 8))
-#define HIGH_BITS		( ~((unsigned int)(~0) >> ONE_EIGHTH ))
+#define THREE_QUARTERS  ((int) ((BITS_IN_int * 3) / 4))
+#define ONE_EIGHTH      ((int) (BITS_IN_int / 8))
+#define HIGH_BITS       ( ~((unsigned int)(~0) >> ONE_EIGHTH ))
 
 #define HASH_MAX 4294967296
 #define HASH_INCREMENT 65536
