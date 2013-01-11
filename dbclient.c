@@ -14,11 +14,14 @@
 
 #include "network.h"
 #include "protocol.h"
+#include "linklist.h"
+#include "conhash.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <regex.h>
+#include <time.h>
 
 #define HELP_INFO()                                                 \
         printf("-------------------------------------------\n");    \
@@ -39,14 +42,12 @@ typedef struct {
     char addr[ADDR_LEN];
     int port;
     int sockfd;
-}server_link;
+}SERVER;
 
 int master_sockfd;
 char DBName[BUFFER_SIZE] = "\0";
 
-int servers_cnt = 0;
-server_link *servers;
-// server_link servers[servers_cnt];
+CONHASH conhash;
 
 int CommandMatching(char *command, char *pattern) {
     regex_t reg;
@@ -60,6 +61,144 @@ int CommandMatching(char *command, char *pattern) {
     }
     regfree(&reg);
     return -1;
+}
+
+int update_conhash() {
+    srand((unsigned)time(0));
+    char buf[BUFFER_SIZE];    
+    int servers_cnt;
+    int size1, size2, send_size, back_size, back_code;
+    char data1[BUFFER_SIZE];
+    char data2[BUFFER_SIZE];
+    int max_try = 5;
+    while(max_try) {
+        // pick a random server
+        int sid = rand() % ConhashGetSize(conhash);
+        int sockfd = 0;
+        CLinklist_Iterator cit;
+        LinklistIteratorSetBegin(conhash, &cit);
+        int i;
+        for(i = 0; i <= sid; ++i)
+            LinklistIteratorToNext(&cit);
+        Node *nptr = (Node *)CirLinklistGetDataPtr(&cit);
+        sockfd = ((SERVER *)(nptr->info))->sockfd;
+
+        // set timeout
+        struct timeval timeout = {3,0};
+        setsockopt(sockfd, SOL_SOCKET,SO_SNDTIMEO, (char *)&timeout, sizeof(struct timeval));
+        setsockopt(sockfd, SOL_SOCKET,SO_RCVTIMEO, (char *)&timeout, sizeof(struct timeval));
+
+        // try to request new server list
+        CreateMsg0(buf, &send_size, GET_SERVER_LIST);
+        SendMsg(sockfd, buf, send_size);
+        back_size = RecvMsg(sockfd, buf, BUFFER_SIZE);
+        AnalyseMsg(buf, &back_code, data1, &size1, data2, &size2);
+        if (back_size <= 0 || back_code != UPDATE_SERVER_LIST) {
+            --max_try;
+        }
+        else {
+            break;
+        }
+    }
+    // if can't get list from servers, try to get from master
+    if (back_size <= 0 || back_code != UPDATE_SERVER_LIST) {
+        // set timeout
+        struct timeval timeout = {3,0};
+        setsockopt(master_sockfd, SOL_SOCKET,SO_SNDTIMEO, (char *)&timeout, sizeof(struct timeval));
+        setsockopt(master_sockfd, SOL_SOCKET,SO_RCVTIMEO, (char *)&timeout, sizeof(struct timeval));
+
+        // try to request new server list
+        CreateMsg0(buf, &send_size, GET_SERVER_LIST);
+        SendMsg(master_sockfd, buf, send_size);
+        back_size = RecvMsg(master_sockfd, buf, BUFFER_SIZE);
+        AnalyseMsg(buf, &back_code, data1, &size1, data2, &size2);
+        if (back_size <= 0 || back_code != SERVER_LIST_OK) {
+            printf("No server is aviliable.\n");
+            return -1;
+        }
+
+    }
+    servers_cnt = *(int *)data1;
+    if (servers_cnt == 0) {
+        printf("No server is aviliable.\n");
+        return -1;
+    }
+    SERVER *servers = NULL;
+    servers = (SERVER *)malloc(servers_cnt * sizeof(SERVER));
+    int i;
+    for(i = 0; i < servers_cnt; ++i) {
+        memcpy(servers[i].addr, data2 + i * sizeof(SERVER_INFO), ADDR_LEN);
+        memcpy(&(servers[i].port), data2 + i * sizeof(SERVER_INFO) + ADDR_LEN, sizeof(int));
+    }
+    // check if any node will be remove
+    CLinklist_Iterator cit;
+    LinklistIteratorSetBegin(conhash, &cit);
+    while(1) {
+        Node *nptr = (Node *)CirLinklistGetDataPtr(&cit);
+        int flag = 0;
+        for(i = 0; i < servers_cnt; ++i) {
+            if (strcmp(((SERVER *)(nptr->info))->addr, servers[i].addr) == 0 && ((SERVER *)(nptr->info))->port == servers[i].port) {
+                flag = 1;
+                break;
+            }
+        }
+        if (flag == 0)
+            CirLinklistDelete(&cit);
+        if (LinklistIteratorAtEnd(&cit))
+            break;
+        LinklistIteratorToNext(&cit);
+    }
+    // check if any node will be add
+    for(i = 0; i < servers_cnt; ++i) {
+        int flag = 0;
+        LinklistIteratorSetBegin(conhash, &cit);
+        while(1) {
+            Node *nptr = (Node *)CirLinklistGetDataPtr(&cit);
+            if (strcmp(((SERVER *)(nptr->info))->addr, servers[i].addr) == 0 && ((SERVER *)(nptr->info))->port == servers[i].port) {
+                flag = 1;
+                break;
+            }
+            if (LinklistIteratorAtEnd(&cit))
+            break;
+            LinklistIteratorToNext(&cit);
+        }
+        if (flag == 0) {
+            servers[i].sockfd = InitializeClient(servers[i].addr, servers[i].port);
+            // receive welcome message from the server
+            char buffer[BUFFER_SIZE];
+            int len = RecvMsg(servers[i].sockfd, &buffer, BUFFER_SIZE);
+            if  (len < 0)
+                printf("Server (%s:%d) connect error.\n", servers[i].addr, servers[i].port);
+            // add node to consistent hash table
+            if (ConhashAddNode(conhash, &(servers[i]), sizeof(SERVER)) < 0)
+                printf("Add node to consistent hash error.\n");
+            // open DB at the new server
+            int size1, size2, send_size, back_size, back_code;
+            char data1[BUFFER_SIZE];
+            char data2[BUFFER_SIZE];
+            CreateMsg1(buffer, &send_size, OPEN, DBName, strlen(DBName));
+            SendMsg(servers[i].sockfd, buffer, send_size);
+            back_size = RecvMsg(servers[i].sockfd, buffer, BUFFER_SIZE);
+            AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
+            if (back_code == ERROR) {
+                printf("Open failed. Try again.\n");
+                return -1;
+            }
+        }
+    }
+    printf("--------Server List---------\n");
+    LinklistIteratorSetBegin(conhash, &cit);
+    while(1) {
+        Node *nptr = (Node *)CirLinklistGetDataPtr(&cit);
+        printf("Id = %d sockfd = %d %s:%d\n", \
+                nptr->id, ((SERVER *)(nptr->info))->sockfd, ((SERVER *)(nptr->info))->addr, ((SERVER *)(nptr->info))->port);
+        if (LinklistIteratorAtEnd(&cit))
+            break;
+        LinklistIteratorToNext(&cit);
+    }
+    printf("----------------------------\n");
+    return 0;
+
 }
 
 void ExecCommand(char *command) {
@@ -82,16 +221,27 @@ void ExecCommand(char *command) {
             printf("Close current data file '%s' first.\n", DBName);
         }
         else {
+        // update server list
+        if (update_conhash() < 0) {
+            printf("Can't exec command\n");
+            return;
+        }
             sscanf(command, "open %s", DBName);
-            for(i = 0; i < servers_cnt; ++i) {
+            CLinklist_Iterator cit;
+            LinklistIteratorSetBegin(conhash, &cit);
+            // open at every server
+            for(i = 0; i < ConhashGetSize(conhash); ++i) {
+                Node *nptr = (Node *)CirLinklistGetDataPtr(&cit);
+                int sockfd = ((SERVER *)(nptr->info))->sockfd;
                 CreateMsg1(buffer, &send_size, OPEN, DBName, strlen(DBName));
-                SendMsg(servers[i].sockfd, buffer, send_size);
-                back_size = RecvMsg(servers[i].sockfd, buffer, BUFFER_SIZE);
+                SendMsg(sockfd, buffer, send_size);
+                back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
                 AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
                 if (back_code == ERROR) {
                     printf("Open failed. Try again.\n");
                     return;
                 }
+                LinklistIteratorToNext(&cit);
             }
             printf("Open successfully.\n");
         }
@@ -108,8 +258,24 @@ void ExecCommand(char *command) {
         char *l = strstr(command, p);
         strcpy(temp, l);
         CreateMsg2(buffer, &send_size, PUT, &key, sizeof(int), temp, strlen(temp));
-        SendMsg(servers[key % servers_cnt].sockfd, buffer, send_size);
-        back_size = RecvMsg(servers[key % servers_cnt].sockfd, buffer, BUFFER_SIZE);
+        // update server list
+        if (update_conhash() < 0) {
+            printf("Can't exec command\n");
+            return;
+        }
+        // find which server to use
+        Node *nptr = ConhashGetNode(conhash, key);
+        int sockfd = ((SERVER *)(nptr->info))->sockfd;
+        // put 
+        SendMsg(sockfd, buffer, send_size);
+        // put to next server, too
+        nptr = ConhashGetNodeAfter(conhash, key, 1);
+        if (nptr != NULL) {
+            int nextsockfd = ((SERVER *)(nptr->info))->sockfd;
+            SendMsg(nextsockfd, buffer, send_size);
+            back_size = RecvMsg(nextsockfd, buffer, BUFFER_SIZE);
+        }
+        back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
         AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
         if (back_code == PUT_OK) {
             printf("Put Successfully.\n");
@@ -123,8 +289,17 @@ void ExecCommand(char *command) {
         int key;
         sscanf(command, "get %d", &key);
         CreateMsg1(buffer, &send_size, GET, &key, sizeof(int));
-        SendMsg(servers[key % servers_cnt].sockfd, buffer, send_size);
-        back_size = RecvMsg(servers[key % servers_cnt].sockfd, buffer, BUFFER_SIZE);
+        // update server list
+        if (update_conhash() < 0) {
+            printf("Can't exec command\n");
+            return;
+        }
+        // find which server to use
+        Node *nptr = ConhashGetNode(conhash, key);
+        int sockfd = ((SERVER *)(nptr->info))->sockfd;
+        // request
+        SendMsg(sockfd, buffer, send_size);
+        back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
         AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
         if (back_code == GET_OK) {
             data1[size1] = '\0';
@@ -139,8 +314,17 @@ void ExecCommand(char *command) {
         int key = -1;
         sscanf(command, "delete %d", &key);
         CreateMsg1(buffer, &send_size, DELETE, &key, sizeof(int));
-        SendMsg(servers[key % servers_cnt].sockfd, buffer, send_size);
-        back_size = RecvMsg(servers[key % servers_cnt].sockfd, buffer, BUFFER_SIZE);
+        // update server list
+        if (update_conhash() < 0) {
+            printf("Can't exec command\n");
+            return;
+        }
+        // find which server to use
+        Node *nptr = ConhashGetNode(conhash, key);
+        int sockfd = ((SERVER *)(nptr->info))->sockfd;
+        // delete
+        SendMsg(sockfd, buffer, send_size);
+        back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
         AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
         if (back_code == DELETE_OK) {
             printf("Delete record key = %d successfully.\n", key);
@@ -148,24 +332,53 @@ void ExecCommand(char *command) {
         else if (back_code == ERROR) {
             printf("Delete failed.\n");
         }
+        // delete from next server, too
+        nptr = ConhashGetNodeAfter(conhash, key, 1);
+        if (nptr != NULL) {
+            sockfd = ((SERVER *)(nptr->info))->sockfd;
+            SendMsg(sockfd, buffer, send_size);
+            back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
+        }
     }
     // CLOSE
     else if ( CommandMatching(command, "close") == 0 ) {
-        for(i = 0; i < servers_cnt; ++i) {
+        // update server list
+        if (update_conhash() < 0) {
+            printf("Can't exec command\n");
+            return;
+        }
+        CLinklist_Iterator cit;
+        LinklistIteratorSetBegin(conhash, &cit);
+        // close at every server
+        for(i = 0; i < ConhashGetSize(conhash); ++i) {
+            Node *nptr = (Node *)CirLinklistGetDataPtr(&cit);
+            int sockfd = ((SERVER *)(nptr->info))->sockfd;
             CreateMsg0(buffer, &send_size, CLOSE);
-            SendMsg(servers[i].sockfd, buffer, send_size);
-            back_size = RecvMsg(servers[i].sockfd, buffer, BUFFER_SIZE);
+            SendMsg(sockfd, buffer, send_size);
+            back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
             AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
+            LinklistIteratorToNext(&cit);
         }
         DBName[0] = '\0';
         printf("Close successfully.\n");
     }
     // EXIT
     else if ( CommandMatching(command, "exit") == 0 ) {
-        for(i = 0; i < servers_cnt; ++i) {
+        // update server list
+        if (update_conhash() < 0) {
+            printf("Can't exec command\n");
+            return;
+        }
+        CLinklist_Iterator cit;
+        LinklistIteratorSetBegin(conhash, &cit);
+        // exit at every server
+        for(i = 0; i < ConhashGetSize(conhash); ++i) {
+            Node *nptr = (Node *)CirLinklistGetDataPtr(&cit);
+            int sockfd = ((SERVER *)(nptr->info))->sockfd;
             CreateMsg0(buffer, &send_size, EXIT);
-            SendMsg(servers[i].sockfd, buffer, send_size);
-            CloseSocket(servers[i].sockfd);
+            SendMsg(sockfd, buffer, send_size);
+            CloseSocket(sockfd);
+            LinklistIteratorToNext(&cit);
         }
         CloseSocket(master_sockfd);
         exit(0);
@@ -199,6 +412,7 @@ int main() {
     int len = RecvMsg(master_sockfd, &buf, BUFFER_SIZE);
     memset(buf, 0, BUFFER_SIZE);
     
+    int servers_cnt;
     int size1, size2, send_size, back_size, back_code;
     char data1[BUFFER_SIZE];
     char data2[BUFFER_SIZE];
@@ -215,30 +429,38 @@ int main() {
         printf("No server avaliable.\n");
         exit(-1);
     }
-    servers = (server_link *)malloc(servers_cnt * sizeof(server_link));
+
+    // create consistent hash table
+    conhash = ConhashCreate();
     int i;
     for(i = 0; i < servers_cnt; ++i) {
-        memcpy(servers[i].addr, data2 + i * sizeof(SERVER_INFO), ADDR_LEN);
-        memcpy(&(servers[i].port), data2 + i * sizeof(SERVER_INFO) + ADDR_LEN, sizeof(int));
+        SERVER serv;
+        memcpy(serv.addr, data2 + i * sizeof(SERVER_INFO), ADDR_LEN);
+        memcpy(&(serv.port), data2 + i * sizeof(SERVER_INFO) + ADDR_LEN, sizeof(int));
+        // init socket
+        serv.sockfd = InitializeClient(serv.addr, serv.port);
+        // receive welcome message from the server
+        char buffer[BUFFER_SIZE];
+        int len = RecvMsg(serv.sockfd, &buffer, BUFFER_SIZE);
+        if  (len < 0)
+            printf("Server (%s:%d) connect error.\n", serv.addr, serv.port);
+        // add node to consistent hash table
+        if (ConhashAddNode(conhash, &serv, sizeof(SERVER)) < 0)
+            printf("Add node to consistent hash error.\n");
     }
+    
     printf("--------Server List---------\n");
-    for(i = 0; i < servers_cnt; ++i) {
-        printf("Server %d : %s:%d\n", i, servers[i].addr, servers[i].port);
+    CLinklist_Iterator cit;
+    LinklistIteratorSetBegin(conhash, &cit);
+    while(1) {
+        Node *nptr = (Node *)CirLinklistGetDataPtr(&cit);
+        printf("Id = %d sockfd = %d %s:%d\n", \
+                nptr->id, ((SERVER *)(nptr->info))->sockfd, ((SERVER *)(nptr->info))->addr, ((SERVER *)(nptr->info))->port);
+        if (LinklistIteratorAtEnd(&cit))
+            break;
+        LinklistIteratorToNext(&cit);
     }
     printf("----------------------------\n");
-
-    // init socket
-    for(i = 0; i < servers_cnt; ++i) {
-        servers[i].sockfd = InitializeClient(servers[i].addr, servers[i].port);
-    }
-
-	// receive welcome message from the server
-    char buffer[BUFFER_SIZE];
-    for(i = 0; i < servers_cnt; ++i) {
-        int len = RecvMsg(servers[i].sockfd, &buffer, BUFFER_SIZE);
-        buffer[len] = '\0';
-        printf("Server %d (%s:%d) returns: %s", i, servers[i].addr, servers[i].port, buffer);
-    }
     printf("*************** Init End ****************\n\n");
 
     char cmdbuf[BUFFER_SIZE];

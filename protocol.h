@@ -39,6 +39,9 @@
 #define GET_SERVER_LIST 101
 #define SERVER_LIST_OK 102
 #define MASTER_OK 199
+#define HEART_BEAT 800
+#define HEART_BEAT_OK 801
+#define UPDATE_SERVER_LIST 1000
 
 #define ERROR 0
 

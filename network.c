@@ -101,6 +101,35 @@ void AcceptHandle(int server_sockfd, short event, void *arg) {
 }
 
 /*
+ * Master accept client callback function
+ */
+void MasterAcceptHandle(int server_sockfd, short event, void *arg) {
+    callback_arg *callarg = (callback_arg *)arg;
+    struct event_base *base = callarg->base;
+    event_callback_fn recv_callback_fn = callarg->callback_fn;
+    struct sockaddr_in clientaddr;
+    socklen_t addr_len = sizeof(struct sockaddr);
+    
+    // accept client connection
+    int newfd = accept(server_sockfd, (struct sockaddr*)&clientaddr, &addr_len);
+    if (newfd < 0) {
+        printf("Accept error.\n");
+        return;
+    }
+    printf("Accept client (%s) at sockfd = %d\n", inet_ntoa(clientaddr.sin_addr), newfd);
+
+    // add new client event
+    struct event *recv_event = event_new(base, newfd, EV_READ, recv_callback_fn, NULL);
+    event_add(recv_event, NULL);
+
+    // send welcome message to client
+	int len = SendMsg(newfd, "Welcome to this server!\n", 24);
+	if (len < 0) {
+		printf("Send welcome to %s error\n", inet_ntoa(clientaddr.sin_addr));
+	}
+}
+
+/*
  * Start server init event, and wait client
  */
 int StartServer(void *arg) {
@@ -130,6 +159,41 @@ int StartServer(void *arg) {
 
     // start event
 	printf("Server Start\n");
+    event_base_dispatch(base);
+
+    return server_sockfd;
+}
+
+/*
+ * Start Master init event, and wait client
+ */
+int StartMaster(void *arg) {
+    char *ip = ((SERVER_START_ARG *)arg)->ip;
+    int port = ((SERVER_START_ARG *)arg)->port;
+    int max_conn = ((SERVER_START_ARG *)arg)->max_conn;
+    event_callback_fn recv_callback_fn = ((SERVER_START_ARG *)arg)->recv_callback_fn;
+    // prepare socket
+	int server_sockfd = PrepareSocket();
+	if ( InitServer(server_sockfd, ip, port, max_conn) != 0 ) {
+		printf("Master start error.\n");
+		return -1;
+	}
+
+    // make non_blocking
+    evutil_make_listen_socket_reuseable(server_sockfd);
+
+    // init event
+    struct event_base *base = event_base_new();
+    assert(base != NULL);
+    struct event *listen_event;
+    callback_arg callarg;
+    callarg.base = base;
+    callarg.callback_fn = recv_callback_fn;
+    listen_event = event_new(base, server_sockfd, EV_READ|EV_PERSIST, MasterAcceptHandle, (void *)&callarg);
+    event_add(listen_event, NULL);
+
+    // start event
+	printf("Master Start\n");
     event_base_dispatch(base);
 
     return server_sockfd;

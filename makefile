@@ -2,11 +2,11 @@
 
 TARGETS = server client master test_hdbapi test_protocol test_networkserver test_networkclient
 
-objects1 = dbserver.o hdbapi.o network.o protocol.o hash.o
-objects2 = dbclient.o network.o protocol.o
+objects1 = dbserver.o hdbapi.o network.o protocol.o hash.o linklist.o
+objects2 = dbclient.o network.o protocol.o conhash.o linklist.o
 objects3 = master.o network.o protocol.o linklist.o
 
-all: client server master
+all: client server master conhash.o
 
 server: $(objects1)
 	gcc -o server $(objects1) -ltokyocabinet -levent

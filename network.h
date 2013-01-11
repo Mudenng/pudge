@@ -45,6 +45,16 @@ typedef struct {
 int StartServer(void *arg);
 
 /*
+ * Start Master, init event and wait client 
+ * input    : ip, port, max_conn, recv_callback_fn
+ * output   : server_sockfd
+ * in/out   : None
+ * return   : if SUCCESS return server_sockfd
+ *          : if FAILURE return -1
+ */
+int StartMaster(void *arg);
+
+/*
  * Init client
  * input    : address, port
  * output   : sockfd

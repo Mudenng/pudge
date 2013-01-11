@@ -66,6 +66,8 @@ int AnalyseMsg(void *buf, int *cmd_code, void *data1, int *size1, void *data2, i
         case DELETE_OK:
         case ERROR:
         case GET_SERVER_LIST:
+        case HEART_BEAT:
+        case HEART_BEAT_OK:
             break;
         case OPEN:
         case GET:
@@ -77,6 +79,7 @@ int AnalyseMsg(void *buf, int *cmd_code, void *data1, int *size1, void *data2, i
             break;
         case PUT:
         case SERVER_LIST_OK:
+        case UPDATE_SERVER_LIST:
             memcpy(size1, buf + sizeof(int), sizeof(int));
             memcpy(data1, buf + sizeof(int) * 2, *size1);
             memcpy(size2, buf + sizeof(int) * 2 + *size1, sizeof(int));

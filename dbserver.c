@@ -16,6 +16,7 @@
 #include "network.h"
 #include "protocol.h"
 #include "hash.h"
+#include "linklist.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -66,6 +67,30 @@ typedef struct {
 
 pthread_mutex_t dbmutex;
 
+typedef struct {
+    char addr[ADDR_LEN];
+    int port;
+}server_link;
+int servers_cnt = 0;
+server_link *servers;
+
+void send_server_list(int sockfd) {
+    printf("Sended server list.\n");
+    int total_size = servers_cnt * sizeof(server_link);
+    char *data = (char *)malloc(total_size);
+    int i;
+    for(i = 0; i < servers_cnt; ++i) {
+        memcpy(data + sizeof(SERVER_INFO) * i, servers[i].addr, ADDR_LEN);
+        memcpy(data + sizeof(SERVER_INFO) * i + ADDR_LEN, &(servers[i].port), sizeof(int));
+    }
+    int back_size;
+    char *buf = (char *)malloc(total_size + sizeof(int) * 2);
+    CreateMsg2(buf, &back_size, UPDATE_SERVER_LIST, &servers_cnt, sizeof(int), data, total_size);
+    SendMsg(sockfd, buf, back_size);
+    // free(data);
+    // free(buf);
+}
+
 /*
  * Handle the client request and return message
  */
@@ -87,6 +112,9 @@ void RequestConduct(void *arg) {
     char buffer[BUFFER_SIZE];
     int back_size;
     switch(cmd_code) {
+        case GET_SERVER_LIST:
+            send_server_list(client_sockfd);
+            break;
         case OPEN:
             data1[size1] = '\0';
             memset(dbname, 0, DBNAME_SIZE);
@@ -257,10 +285,45 @@ void Thread_DB(void *arg) {
 }
 
 /*
- * Server console thread
+ * heart beat thread 
  */
-void Thread_ServerConsole(void *arg) {
-    
+void Thread_heartbeat(void *arg) {
+    char buffer[BUFFER_SIZE];
+    char data1[BUFFER_SIZE];
+    char data2[BUFFER_SIZE];
+    int size1;
+    int size2;
+    int send_size, back_size;
+    int master_sockfd = *(int *)arg;
+    while(1) {
+        int back_code;
+        back_size = RecvMsg(master_sockfd, buffer, BUFFER_SIZE);
+        AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
+        if (back_code == HEART_BEAT) {
+            CreateMsg0(buffer, &send_size, HEART_BEAT_OK);
+            SendMsg(master_sockfd, buffer, send_size);
+        }
+        else if (back_code == UPDATE_SERVER_LIST) {
+            servers_cnt = *(int *)data1;
+            if (servers_cnt == 0) {
+                printf("No server avaliable.\n");
+                continue;
+            }
+            free(servers);
+            servers = NULL;
+            servers = (server_link *)malloc(servers_cnt * sizeof(server_link));
+            int i;
+            for(i = 0; i < servers_cnt; ++i) {
+                memcpy(servers[i].addr, data2 + i * sizeof(SERVER_INFO), ADDR_LEN);
+                memcpy(&(servers[i].port), data2 + i * sizeof(SERVER_INFO) + ADDR_LEN, sizeof(int));
+            }
+            printf("-----Update Server List-----\n");
+            for(i = 0; i < servers_cnt; ++i) {
+                printf("Server %d : %s:%d\n", i, servers[i].addr, servers[i].port);
+            }
+            printf("----------------------------\n");
+        }
+    }
 }
 
 /*
@@ -269,8 +332,10 @@ void Thread_ServerConsole(void *arg) {
 void recv_callback_fn(int sockfd, short event, void *arg) {
     // printf("Receive client request\n");
     char buffer[BUFFER_SIZE];
-    char data1[BUFFER_SIZE];
-    char data2[BUFFER_SIZE];
+    // char data1[BUFFER_SIZE];
+    // char data2[BUFFER_SIZE];
+    char *data1 = (char *)malloc(BUFFER_SIZE);
+    char *data2 = (char *)malloc(BUFFER_SIZE);
     int cmd_code;
     int size1;
     int size2;
@@ -386,8 +451,9 @@ int main() {
         printf("Speak with Master error. Try again.\n");
         exit(-1);
     }
+    pthread_t heartbeat_tid;
+    pthread_create(&heartbeat_tid, NULL, (void *)Thread_heartbeat, &master_sockfd);
 
-    // CloseSocket(master_sockfd);
 
     // close server
     int server_sockfd;
