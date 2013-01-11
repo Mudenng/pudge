@@ -101,7 +101,7 @@ void AcceptHandle(int server_sockfd, short event, void *arg) {
 }
 
 /*
- * Master accept client callback function
+ * Master accept event callback function
  */
 void MasterAcceptHandle(int server_sockfd, short event, void *arg) {
     callback_arg *callarg = (callback_arg *)arg;

@@ -39,11 +39,14 @@
 #define RANDOM(x)                   \
         rand_id = random()%x;
 
+// server port
 int myport;
 
+// client->db_name and db_name->db_handle
 HASHTABLE db_handle_table;
 HASHTABLE db_name_table;
 
+// thread task queue
 HASHTABLE thread_msg_table;
 int thread_signal[THREADS];
 
@@ -67,6 +70,7 @@ typedef struct {
 
 pthread_mutex_t dbmutex;
 
+// server list struction
 typedef struct {
     char addr[ADDR_LEN];
     int port;
@@ -74,6 +78,9 @@ typedef struct {
 int servers_cnt = 0;
 server_link *servers;
 
+/*
+ * send newest server list to server
+ */
 void send_server_list(int sockfd) {
     printf("Sended server list.\n");
     int total_size = servers_cnt * sizeof(server_link);
@@ -87,8 +94,6 @@ void send_server_list(int sockfd) {
     char *buf = (char *)malloc(total_size + sizeof(int) * 2);
     CreateMsg2(buf, &back_size, UPDATE_SERVER_LIST, &servers_cnt, sizeof(int), data, total_size);
     SendMsg(sockfd, buf, back_size);
-    // free(data);
-    // free(buf);
 }
 
 /*
@@ -113,8 +118,10 @@ void RequestConduct(void *arg) {
     int back_size;
     switch(cmd_code) {
         case GET_SERVER_LIST:
+            // send server list to client
             send_server_list(client_sockfd);
             break;
+
         case OPEN:
             data1[size1] = '\0';
             memset(dbname, 0, DBNAME_SIZE);
@@ -145,6 +152,7 @@ void RequestConduct(void *arg) {
             printf("handled 'OPEN %s' from %d\n", data1, client_sockfd);
             free(dbname);
             break;
+
         case CLOSE:
             HashGetValue(db_name_table, &client_sockfd, dbname);
             HashDelete(db_name_table, &client_sockfd);
@@ -168,6 +176,7 @@ void RequestConduct(void *arg) {
             printf("handled 'CLOSE' from %d\n", client_sockfd);
             free(dbname);
             break;
+
         case EXIT:
             if ( HashGetValue(db_name_table, &client_sockfd, dbname) != 0) {
                 HashDelete(db_name_table, &client_sockfd);
@@ -191,6 +200,7 @@ void RequestConduct(void *arg) {
             printf("client %d disconnected.\n", client_sockfd);
             free(dbname);
             break;
+
         case PUT:
             HashGetValue(db_name_table, &client_sockfd, dbname);
             HashGetValue(db_handle_table, dbname, &db);
@@ -207,7 +217,7 @@ void RequestConduct(void *arg) {
                 else {
                     CreateMsg0(buffer, &back_size, ERROR);
                 }
-                printf("handled 'PUT %d %s' from %d\n", key, data2, client_sockfd);
+                printf("handled 'PUT' from %d\n", client_sockfd);
             }
             else {
                 CreateMsg0(buffer, &back_size, ERROR);
@@ -215,6 +225,7 @@ void RequestConduct(void *arg) {
             SendMsg(client_sockfd, buffer, back_size);
             free(dbname);
             break;
+
         case GET:
             HashGetValue(db_name_table, &client_sockfd, dbname);
             HashGetValue(db_handle_table, dbname, &db);
@@ -229,7 +240,7 @@ void RequestConduct(void *arg) {
                 else {
                     CreateMsg0(buffer, &back_size, ERROR);
                 }
-                printf("handled 'GET %d' from %d\n", key, client_sockfd);
+                printf("handled 'GET' from %d\n", client_sockfd);
             }
             else {
                 CreateMsg0(buffer, &back_size, ERROR);
@@ -237,6 +248,7 @@ void RequestConduct(void *arg) {
             SendMsg(client_sockfd, buffer, back_size);
             free(dbname);
             break;
+
         case DELETE:
             HashGetValue(db_name_table, &client_sockfd, dbname);
             HashGetValue(db_handle_table, dbname, &db);
@@ -248,7 +260,7 @@ void RequestConduct(void *arg) {
                 else {
                     CreateMsg0(buffer, &back_size, ERROR);
                 }
-                printf("handled 'DELETE %d' from %d\n", key, client_sockfd);
+                printf("handled 'DELETE' from %d\n", client_sockfd);
             }
             else {
                 CreateMsg0(buffer, &back_size, ERROR);
@@ -260,7 +272,7 @@ void RequestConduct(void *arg) {
 }
 
 /*
- * Tread function, get task from queue and hanle it
+ * Tread function, get task from queue and handle it
  */
 void Thread_DB(void *arg) {
     pthread_t pt = pthread_self();
@@ -285,7 +297,7 @@ void Thread_DB(void *arg) {
 }
 
 /*
- * heart beat thread 
+ * heart beat thread with master
  */
 void Thread_heartbeat(void *arg) {
     char buffer[BUFFER_SIZE];
@@ -299,10 +311,12 @@ void Thread_heartbeat(void *arg) {
         int back_code;
         back_size = RecvMsg(master_sockfd, buffer, BUFFER_SIZE);
         AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
+        // receive a heart beat from master, send OK back
         if (back_code == HEART_BEAT) {
             CreateMsg0(buffer, &send_size, HEART_BEAT_OK);
             SendMsg(master_sockfd, buffer, send_size);
         }
+        // receive server list update from master
         else if (back_code == UPDATE_SERVER_LIST) {
             servers_cnt = *(int *)data1;
             if (servers_cnt == 0) {
@@ -352,7 +366,9 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
     msg->size2 = size2;
     int rand_id;
     RANDOM(THREADS);
+    // add task to thread's queue
     HashAddNode_tail(thread_msg_table, &rand_id, &msg);
+    // send signal to thread
     sem_t *sem;
     char sem_name[10];
     sprintf(sem_name, SEM_NAME_FORM, myport, rand_id);
@@ -368,7 +384,7 @@ unsigned int my_hash(const char *key) {
 }
 
 int main() {
-    // get ip
+    // get my ip
     char interface_name[20];
     char ip[INET_ADDRSTRLEN];
     while(1) {
@@ -436,7 +452,7 @@ int main() {
     }
     pthread_mutex_init(&dbmutex, NULL);
 
-    // tell master
+    // tell master this is a new server
     SERVER_INFO this_server;
     strncpy(this_server.addr, ip, ADDR_LEN);
     this_server.port = myport;

@@ -1,8 +1,24 @@
+/********************************************************************/
+/* Copyright (C) SSE-USTC, 2012                                     */
+/*                                                                  */
+/*  FILE NAME             :  linklist.c                             */
+/*  PRINCIPAL AUTHOR      :  Pudge                                  */
+/*  SUBSYSTEM NAME        :  base structs                           */
+/*  MODULE NAME           :  linklist                               */
+/*  LANGUAGE              :  C                                      */
+/*  TARGET ENVIRONMENT    :  Any                                    */
+/*  DATE OF FIRST RELEASE :  2013/01/05                             */
+/*  DESCRIPTION           :  General linklist                       */
+/********************************************************************/
+
 #include "linklist.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * Create new linklist
+ */
 LINKLIST LinklistCreate(int data_size) {
     // head is like [data_size][node_cnt][first_node_ptr][last_node_ptr]
     LINKLIST linklist = (LINKLIST)malloc(LL_HEAD_SIZE);
@@ -11,6 +27,9 @@ LINKLIST LinklistCreate(int data_size) {
     return linklist;
 }
 
+/*
+ * Create a new node
+ */
 LL_NODE_PTR NewNode(int data_size, void *data) {
     // a node is like [prev_node_ptr][data][next_node_ptr]
     LL_NODE_PTR new = (LL_NODE_PTR)malloc(data_size + 2 * sizeof(LL_NODE_PTR));
@@ -21,6 +40,9 @@ LL_NODE_PTR NewNode(int data_size, void *data) {
     return new;
 }
 
+/*
+ * Push new node to back
+ */
 int LinklistPushBack(LINKLIST linklist, void *data) {
     int data_size;
     int node_cnt;
@@ -47,6 +69,9 @@ int LinklistPushBack(LINKLIST linklist, void *data) {
     return 0;
 }
 
+/*
+ * Push new node to head
+ */
 int LinklistPushHead(LINKLIST linklist, void *data) {
     int data_size;
     int node_cnt;
@@ -73,12 +98,18 @@ int LinklistPushHead(LINKLIST linklist, void *data) {
     return 0;
 }
 
+/*
+ * Get linklist node count
+ */
 int LinklistGetSize(LINKLIST linklist) {
     int size = 0;
     memcpy(&size, linklist + sizeof(int), sizeof(int));
     return size;
 }
 
+/*
+ * Insert node after current
+ */
 int LinklistInsertAfter(Linklist_Iterator *it, void *data) {
     if (it->ptr == NULL)
         return -1;
@@ -108,6 +139,9 @@ int LinklistInsertAfter(Linklist_Iterator *it, void *data) {
     return 0;
 }
 
+/*
+ * Insert node before current
+ */
 int LinklistInsertBefore(Linklist_Iterator *it, void *data) {
     if (it->ptr == NULL)
         return -1;
@@ -137,6 +171,9 @@ int LinklistInsertBefore(Linklist_Iterator *it, void *data) {
     return 0;
 }
 
+/*
+ * Delete current node
+ */
 int LinklistDelete(Linklist_Iterator *it) {
     if (it->ptr == NULL)
         return -1;
@@ -173,18 +210,27 @@ int LinklistDelete(Linklist_Iterator *it) {
     return 0;
 }
 
+/*
+ * Set iterator at head
+ */
 void LinklistIteratorSetBegin(LINKLIST linklist, Linklist_Iterator *it) {
     it->linklist = linklist;
     memcpy(&(it->data_size), linklist, sizeof(int));
     memcpy(&(it->ptr), linklist + 2 * sizeof(int), sizeof(LL_NODE_PTR));
 }
 
+/*
+ * Set iterator at tail
+ */
 void LinklistIteratorSetTail(LINKLIST linklist, Linklist_Iterator *it) {
     it->linklist = linklist;
     memcpy(&(it->data_size), linklist, sizeof(int));
     memcpy(&(it->ptr), linklist + 2 * sizeof(int) + sizeof(LL_NODE_PTR), sizeof(LL_NODE_PTR));
 }
 
+/*
+ * Check if iterator at end
+ */
 int LinklistIteratorAtEnd(Linklist_Iterator *it) {
     LL_NODE_PTR last;
     memcpy(&last, (it->linklist) + 2 * sizeof(int) + sizeof(LL_NODE_PTR), sizeof(LL_NODE_PTR));
@@ -194,6 +240,9 @@ int LinklistIteratorAtEnd(Linklist_Iterator *it) {
         return 0;
 }
 
+/*
+ * Check if iterator at head
+ */
 int LinklistIteratorAtHead(Linklist_Iterator *it) {
     LL_NODE_PTR first;
     memcpy(&first, (it->linklist) + 2 * sizeof(int), sizeof(LL_NODE_PTR));
@@ -203,20 +252,33 @@ int LinklistIteratorAtHead(Linklist_Iterator *it) {
         return 0;
 }
 
+/*
+ * Move iterator to next
+ */
 void LinklistIteratorToNext(Linklist_Iterator *it) {
     memcpy(&(it->ptr), (it->ptr) + sizeof(LL_NODE_PTR) + (it->data_size), sizeof(LL_NODE_PTR));
 }
 
+/*
+ * Move iterator to prev
+ */
 void LinklistIteratorToPrev(Linklist_Iterator *it) {
     memcpy(&(it->ptr), (it->ptr), sizeof(LL_NODE_PTR));
 }
 
+/*
+ * Get node data pointer
+ */
 void *LinklistGetDataPtr(Linklist_Iterator *it) {
     void *data = (it->ptr) + sizeof(LL_NODE_PTR);
     return data;
 }
 
 // Circular link list
+
+/*
+ * Push new node back
+ */
 int CirLinklistPushBack(CLINKLIST linklist, void *data) {
     int data_size;
     int node_cnt;
@@ -253,6 +315,9 @@ int CirLinklistPushBack(CLINKLIST linklist, void *data) {
     return 0;
 }
 
+/*
+ * Push new node ahead
+ */
 int CirLinklistPushHead(CLINKLIST linklist, void *data) {
     int data_size;
     int node_cnt;
@@ -289,6 +354,9 @@ int CirLinklistPushHead(CLINKLIST linklist, void *data) {
     return 0;
 }
 
+/*
+ * Insert node after current
+ */
 int CirLinklistInsertAfter(CLinklist_Iterator *it, void *data) {
     if (it->ptr == NULL)
         return -1;
@@ -318,6 +386,9 @@ int CirLinklistInsertAfter(CLinklist_Iterator *it, void *data) {
     return 0;
 }
 
+/*
+ * Insert node before current
+ */
 int CirLinklistInsertBefore(Linklist_Iterator *it, void *data) {
     if (it->ptr == NULL)
         return -1;
@@ -347,6 +418,9 @@ int CirLinklistInsertBefore(Linklist_Iterator *it, void *data) {
     return 0;
 }
 
+/*
+ * Delete current node
+ */
 int CirLinklistDelete(Linklist_Iterator *it) {
     if (it->ptr == NULL)
         return -1;

@@ -38,6 +38,7 @@
 
 #define BUFFER_SIZE 1000
 
+// server list struct
 typedef struct {
     char addr[ADDR_LEN];
     int port;
@@ -45,10 +46,14 @@ typedef struct {
 }SERVER;
 
 int master_sockfd;
+
 char DBName[BUFFER_SIZE] = "\0";
 
 CONHASH conhash;
 
+/*
+ * Command match
+ */
 int CommandMatching(char *command, char *pattern) {
     regex_t reg;
     regmatch_t pmatch[1];
@@ -63,6 +68,9 @@ int CommandMatching(char *command, char *pattern) {
     return -1;
 }
 
+/*
+ * Update conhash before request
+ */
 int update_conhash() {
     srand((unsigned)time(0));
     char buf[BUFFER_SIZE];    
@@ -162,7 +170,9 @@ int update_conhash() {
             break;
             LinklistIteratorToNext(&cit);
         }
+        // if find a new server
         if (flag == 0) {
+            // connect to server
             servers[i].sockfd = InitializeClient(servers[i].addr, servers[i].port);
             // receive welcome message from the server
             char buffer[BUFFER_SIZE];
@@ -201,6 +211,9 @@ int update_conhash() {
 
 }
 
+/*
+ * Exec command
+ */
 void ExecCommand(char *command) {
     char buffer[BUFFER_SIZE];
     char data1[BUFFER_SIZE];
@@ -221,11 +234,11 @@ void ExecCommand(char *command) {
             printf("Close current data file '%s' first.\n", DBName);
         }
         else {
-        // update server list
-        if (update_conhash() < 0) {
-            printf("Can't exec command\n");
-            return;
-        }
+            // update server list
+            if (update_conhash() < 0) {
+                printf("Can't exec command\n");
+                return;
+            }
             sscanf(command, "open %s", DBName);
             CLinklist_Iterator cit;
             LinklistIteratorSetBegin(conhash, &cit);
@@ -266,15 +279,16 @@ void ExecCommand(char *command) {
         // find which server to use
         Node *nptr = ConhashGetNode(conhash, key);
         int sockfd = ((SERVER *)(nptr->info))->sockfd;
-        // put 
+        // put to right server
         SendMsg(sockfd, buffer, send_size);
-        // put to next server, too
+        // put to the next one server, too
         nptr = ConhashGetNodeAfter(conhash, key, 1);
         if (nptr != NULL) {
             int nextsockfd = ((SERVER *)(nptr->info))->sockfd;
             SendMsg(nextsockfd, buffer, send_size);
             back_size = RecvMsg(nextsockfd, buffer, BUFFER_SIZE);
         }
+        // receive msg from right server
         back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
         AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
         if (back_code == PUT_OK) {
@@ -408,10 +422,12 @@ int main() {
         break;
     }
 
+    // welcome message
     char buf[BUFFER_SIZE];
     int len = RecvMsg(master_sockfd, &buf, BUFFER_SIZE);
     memset(buf, 0, BUFFER_SIZE);
     
+    // request server list
     int servers_cnt;
     int size1, size2, send_size, back_size, back_code;
     char data1[BUFFER_SIZE];
@@ -463,6 +479,7 @@ int main() {
     printf("----------------------------\n");
     printf("*************** Init End ****************\n\n");
 
+    // start to get and exec command
     char cmdbuf[BUFFER_SIZE];
     HELP_INFO();
     getchar();

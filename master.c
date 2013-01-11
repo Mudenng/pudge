@@ -1,3 +1,16 @@
+/********************************************************************/
+/* Copyright (C) SSE-USTC, 2012                                     */
+/*                                                                  */
+/*  FILE NAME             :  master.c                               */
+/*  PRINCIPAL AUTHOR      :  Pudge Group                            */
+/*  SUBSYSTEM NAME        :  master                                 */
+/*  MODULE NAME           :  master                                 */
+/*  LANGUAGE              :  C                                      */
+/*  TARGET ENVIRONMENT    :  LINUX/UNIX                             */
+/*  DATE OF FIRST RELEASE :  2013/01/01                             */
+/*  DESCRIPTION           :  Master server of system                */
+/********************************************************************/
+
 #include "network.h"
 #include "protocol.h"
 #include "linklist.h"
@@ -29,6 +42,9 @@ LINKLIST sockfd_list;
 pthread_t server_thread[MAX_SERVER_THREAD];
 int usable_tid = 0;
 
+/*
+ * Push newest server list to all servers
+ */
 void push_list() {
     // create data
     int back_size;
@@ -58,6 +74,9 @@ void push_list() {
     free(buf); 
 }
 
+/*
+ * Connection with every server, heart beat
+ */
 void Thread_Server(void *arg) {
     int sockfd = ((SERVER_THREAD_ARG *)arg)->sockfd;
     printf("***New Server connect\n");
@@ -149,6 +168,9 @@ void Thread_Server(void *arg) {
 }
 
 
+/*
+ * event callback function
+ */
 void recv_callback_fn(int sockfd, short event, void *arg) {
     char buffer[BUFFER_SIZE];
     char data1[BUFFER_SIZE];
@@ -161,9 +183,11 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
     if (len == -1)
         return;
     AnalyseMsg(buffer, &cmd_code, data1, &size1, data2, &size2);
+    // if a new server connected
     if (cmd_code == NEW_SERVER) {
         SERVER_THREAD_ARG *thread_arg = (SERVER_THREAD_ARG *)malloc(sizeof(SERVER_THREAD_ARG));
         thread_arg->sockfd = sockfd;
+        // add server to server list
         LinklistPushBack(sockfd_list, &sockfd);
         memcpy(&(thread_arg->info), data1, size1);
         if (usable_tid >= MAX_SERVER_THREAD) {
@@ -174,6 +198,7 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
         pthread_create(&server_thread[usable_tid], NULL, (void *)Thread_Server, thread_arg);
         ++usable_tid;
     }
+    // if a new client connected
     else if (cmd_code == GET_SERVER_LIST) {
         printf("***Client request\n");
         int list_size = LinklistGetSize(server_list);
@@ -188,6 +213,7 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
             LinklistIteratorToNext(&it);
         }
         char *buf = (char *)malloc(total_size + sizeof(int) * 2);
+        // send server list
         CreateMsg2(buf, &back_size, SERVER_LIST_OK, &list_size, sizeof(int), data, total_size);
         SendMsg(sockfd, buf, back_size);
         free(data);

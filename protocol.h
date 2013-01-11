@@ -44,6 +44,7 @@
 #define UPDATE_SERVER_LIST 1000
 
 #define ERROR 0
+/* * * * * * * * * * * */
 
 #define ADDR_LEN 30
 typedef struct {

@@ -1,8 +1,24 @@
+/********************************************************************/
+/* Copyright (C) SSE-USTC, 2012                                     */
+/*                                                                  */
+/*  FILE NAME             :  conhash.c                              */
+/*  PRINCIPAL AUTHOR      :  pudge                                  */
+/*  SUBSYSTEM NAME        :  base structs                           */
+/*  MODULE NAME           :  conhash                                */
+/*  LANGUAGE              :  C                                      */
+/*  TARGET ENVIRONMENT    :  Any                                    */
+/*  DATE OF FIRST RELEASE :  2013/01/09                             */
+/*  DESCRIPTION           :  consistent hash struction              */
+/********************************************************************/
+
 #include "conhash.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * Hash function
+ */
 unsigned int HashPJW (const char *datum, int size) {
     unsigned int hash_value, i;
 
@@ -19,11 +35,17 @@ unsigned int HashPJW (const char *datum, int size) {
 	return ( hash_value );
 }
 
+/*
+ * Create new conhash
+ */
 CONHASH ConhashCreate() {
     CLINKLIST clist = CirLinklistCreate(sizeof(Node));
     return clist; 
 }
 
+/*
+ * Add node
+ */
 int ConhashAddNode(CONHASH conhash, void *info, int info_size) {
     Node new_node;
     memcpy(new_node.info, info, info_size);
@@ -80,6 +102,9 @@ int ConhashAddNode(CONHASH conhash, void *info, int info_size) {
     }
 }
 
+/*
+ * Remove node
+ */
 int ConhashRemoveNode(CONHASH conhash, int id) {
     if (CirLinklistGetSize(conhash) == 0)
         return -1;
@@ -100,6 +125,9 @@ int ConhashRemoveNode(CONHASH conhash, int id) {
     }
 }
 
+/*
+ * Get right node ptr by key
+ */
 Node *ConhashGetNode(CONHASH conhash, int key) {
     if (CirLinklistGetSize(conhash) == 0)
         return NULL;
@@ -122,6 +150,9 @@ Node *ConhashGetNode(CONHASH conhash, int key) {
     }
 }
 
+/*
+ * Get node after right node
+ */
 Node *ConhashGetNodeAfter(CONHASH conhash, int key, int n) {
     if (CirLinklistGetSize(conhash) == 0)
         return NULL;
@@ -159,6 +190,9 @@ Node *ConhashGetNodeAfter(CONHASH conhash, int key, int n) {
     
 }
 
+/*
+ * Get node before right node
+ */
 Node *ConhashGetNodeBefore(CONHASH conhash, int key, int n) {
     if (CirLinklistGetSize(conhash) == 0)
         return NULL;
@@ -196,10 +230,16 @@ Node *ConhashGetNodeBefore(CONHASH conhash, int key, int n) {
     
 }
 
+/*
+ * Get nodes count
+ */
 int ConhashGetSize(CONHASH conhash) {
     return CirLinklistGetSize(conhash);
 }
 
+/*
+ * Get conhash space size
+ */
 int ConhashGetSpaceSize(CONHASH conhash) {
     int cnt = ConhashGetSize(conhash);
     return LL_HEAD_SIZE + cnt * (sizeof(Node) + 2 * sizeof(LL_NODE_PTR));

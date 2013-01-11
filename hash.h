@@ -1,7 +1,7 @@
 /********************************************************************/
 /* Copyright (C) SSE-USTC, 2012                                     */
 /*                                                                  */
-/*  FILE NAME             :  hasn.h                                 */
+/*  FILE NAME             :  hash.h                                 */
 /*  PRINCIPAL AUTHOR      :  lei                                    */
 /*  SUBSYSTEM NAME        :  base structs                           */
 /*  MODULE NAME           :  hash table                             */
