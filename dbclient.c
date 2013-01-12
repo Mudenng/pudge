@@ -196,7 +196,6 @@ int update_conhash() {
             }
         }
     }
-    /*
     printf("\n--------Server List---------\n");
     LinklistIteratorSetBegin(conhash, &cit);
     while(1) {
@@ -208,7 +207,6 @@ int update_conhash() {
         LinklistIteratorToNext(&cit);
     }
     printf("----------------------------\n\n");
-    */
     return 0;
 
 }
