@@ -78,22 +78,23 @@ typedef struct {
 int servers_cnt = 0;
 server_link *servers;
 
+
 /*
  * send newest server list to server
  */
 void send_server_list(int sockfd) {
-    printf("Sended server list.\n");
     int total_size = servers_cnt * sizeof(server_link);
-    char *data = (char *)malloc(total_size);
+    char data[BUFFER_SIZE];
+    char buf[BUFFER_SIZE];
     int i;
     for(i = 0; i < servers_cnt; ++i) {
         memcpy(data + sizeof(SERVER_INFO) * i, servers[i].addr, ADDR_LEN);
         memcpy(data + sizeof(SERVER_INFO) * i + ADDR_LEN, &(servers[i].port), sizeof(int));
     }
     int back_size;
-    char *buf = (char *)malloc(total_size + sizeof(int) * 2);
     CreateMsg2(buf, &back_size, UPDATE_SERVER_LIST, &servers_cnt, sizeof(int), data, total_size);
     SendMsg(sockfd, buf, back_size);
+    printf("handled 'Sended server list'.\n");
 }
 
 /*
@@ -107,7 +108,6 @@ void RequestConduct(void *arg) {
     int size1 = ((MESSAGE *)arg)->size1;
     int size2 = ((MESSAGE *)arg)->size2;
     char buffer2[BUFFER_SIZE];
-    free(arg);
     // memcpy(buffer2, data2, size2);
     // buffer2[size2] = '\0';
     // printf("arg->data2 : %s\n", buffer2);
@@ -208,7 +208,6 @@ void RequestConduct(void *arg) {
                 int key = (int)*data1;
                 value_struct value;
                 data2[size2] = '\0';
-                printf("put %s\n", data2);
                 value.content = data2;
                 value.size = strlen((char *)value.content);
                 if (PutKeyValue(db, key, &value) == 0) {
@@ -269,6 +268,7 @@ void RequestConduct(void *arg) {
             free(dbname);
             break;
     }
+    printf("----------------------------\n\n");
 }
 
 /*
@@ -277,7 +277,6 @@ void RequestConduct(void *arg) {
 void Thread_DB(void *arg) {
     pthread_t pt = pthread_self();
     int tid = ((THREAD_ARG *)arg)->tid;
-    free(arg);
     printf("Thread %d ready\n", tid);
     while(1) {
         sem_t *sem;
@@ -290,6 +289,7 @@ void Thread_DB(void *arg) {
         MESSAGE *msg;
         while(HashGetValue(thread_msg_table, &tid, &msg) != 0) {
             HashDelete(thread_msg_table, &tid);
+            printf("----------------------------\n");
             printf("Thread %d handling.\n", tid);
             RequestConduct(msg);
         }
@@ -323,7 +323,6 @@ void Thread_heartbeat(void *arg) {
                 printf("No server avaliable.\n");
                 continue;
             }
-            free(servers);
             servers = NULL;
             servers = (server_link *)malloc(servers_cnt * sizeof(server_link));
             int i;
@@ -331,11 +330,11 @@ void Thread_heartbeat(void *arg) {
                 memcpy(servers[i].addr, data2 + i * sizeof(SERVER_INFO), ADDR_LEN);
                 memcpy(&(servers[i].port), data2 + i * sizeof(SERVER_INFO) + ADDR_LEN, sizeof(int));
             }
-            printf("-----Update Server List-----\n");
+            printf("\n-----Update Server List-----\n");
             for(i = 0; i < servers_cnt; ++i) {
                 printf("Server %d : %s:%d\n", i, servers[i].addr, servers[i].port);
             }
-            printf("----------------------------\n");
+            printf("----------------------------\n\n");
         }
     }
 }
@@ -384,18 +383,15 @@ unsigned int my_hash(const char *key) {
 }
 
 int main() {
-    // get my ip
-    char interface_name[20];
+    // get ip
     char ip[INET_ADDRSTRLEN];
-    while(1) {
-        printf("Interface name: ");
-        scanf("%s", interface_name);
-        if (get_local_ip(interface_name, ip) == -1) {
-            printf("Get IP error, check Interface name.\n\n");
-            continue;
-        }
-        break;
-    }
+    printf("Your computer has these IPs:\n");
+    show_local_ip();
+    printf("\n");
+    printf("Pick one IP to use:\n");
+    int index;
+    scanf("%d", &index);
+    pick_local_ip(index, ip);
 
     // connect to master
     char master_addr[ADDR_LEN];
@@ -479,6 +475,7 @@ int main() {
     HashDestroyTable(thread_msg_table);
     HashDestroyTable(db_name_table);
     printf("Server stoped.\n");
+
     return 0;
 }
 

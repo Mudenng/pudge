@@ -83,14 +83,20 @@ void CloseSocket(int sockfd);
 int get_free_port();
 
 /*
- * Get IP using interface name
- * input    : interface name
- * output   : IP
+ * Show all local ips
+ * input    : None
+ * output   : all IPs
  * in/out   : None
- * return   : if SUCCESS return 1
- *          : if FAILURE return -1
  */
-int get_local_ip(char *interface_name, char *ip);
+void show_local_ip();
+
+/*
+ * pick an ip
+ * input    : ip index
+ * output   : ip
+ * in/out   : None
+ */
+void pick_local_ip(int index, char *ip);
 
 /*
  * Send a message

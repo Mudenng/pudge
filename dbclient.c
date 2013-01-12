@@ -86,13 +86,13 @@ int update_conhash() {
         CLinklist_Iterator cit;
         LinklistIteratorSetBegin(conhash, &cit);
         int i;
-        for(i = 0; i <= sid; ++i)
+        for(i = 0; i < sid; ++i)
             LinklistIteratorToNext(&cit);
         Node *nptr = (Node *)CirLinklistGetDataPtr(&cit);
         sockfd = ((SERVER *)(nptr->info))->sockfd;
 
         // set timeout
-        struct timeval timeout = {3,0};
+        struct timeval timeout = {5,0};
         setsockopt(sockfd, SOL_SOCKET,SO_SNDTIMEO, (char *)&timeout, sizeof(struct timeval));
         setsockopt(sockfd, SOL_SOCKET,SO_RCVTIMEO, (char *)&timeout, sizeof(struct timeval));
 
@@ -196,7 +196,8 @@ int update_conhash() {
             }
         }
     }
-    printf("--------Server List---------\n");
+    /*
+    printf("\n--------Server List---------\n");
     LinklistIteratorSetBegin(conhash, &cit);
     while(1) {
         Node *nptr = (Node *)CirLinklistGetDataPtr(&cit);
@@ -206,7 +207,8 @@ int update_conhash() {
             break;
         LinklistIteratorToNext(&cit);
     }
-    printf("----------------------------\n");
+    printf("----------------------------\n\n");
+    */
     return 0;
 
 }

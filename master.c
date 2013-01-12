@@ -42,6 +42,8 @@ LINKLIST sockfd_list;
 pthread_t server_thread[MAX_SERVER_THREAD];
 int usable_tid = 0;
 
+pthread_mutex_t listmutex;
+
 /*
  * Push newest server list to all servers
  */
@@ -70,8 +72,6 @@ void push_list() {
             break;
         LinklistIteratorToNext(&it);
     }
-    free(data);
-    free(buf); 
 }
 
 /*
@@ -79,7 +79,8 @@ void push_list() {
  */
 void Thread_Server(void *arg) {
     int sockfd = ((SERVER_THREAD_ARG *)arg)->sockfd;
-    printf("***New Server connect\n");
+    printf("--------------------------------------\n");
+    printf("*New Server connect\n");
     // add new server
     if (LinklistPushBack(server_list, &(((SERVER_THREAD_ARG *)arg)->info)) < 0)
         printf("Add node to list error.\n");
@@ -94,7 +95,7 @@ void Thread_Server(void *arg) {
     SendMsg(sockfd, buffer, back_size);
     Linklist_Iterator it;
     LinklistIteratorSetBegin(server_list, &it);
-    printf("Servers now online:\n");
+    printf("\nServers now online:\n");
     while(1) {
         SERVER_INFO *servinfo = LinklistGetDataPtr(&it);
         printf("  - %s:%d -\n", servinfo->addr, servinfo->port);
@@ -102,9 +103,11 @@ void Thread_Server(void *arg) {
             break;
         LinklistIteratorToNext(&it);
     }
+    printf("\n");
     // push server list
     printf("Push new server list to all servers.\n");     
     push_list();
+    printf("-------------------------------------\n");
 
     // heart beat
     struct timeval timeout = {3,0};
@@ -123,8 +126,10 @@ void Thread_Server(void *arg) {
             break;
         }
     }
+    printf("------------------------------------\n");
     printf("!!!One server (%s:%d) down.\n", ((SERVER_THREAD_ARG *)arg)->info.addr, ((SERVER_THREAD_ARG *)arg)->info.port);
 
+    pthread_mutex_lock(&listmutex);    
     // delete server from list
     int i;
     LinklistIteratorSetBegin(server_list, &it);
@@ -147,10 +152,11 @@ void Thread_Server(void *arg) {
         }
         LinklistIteratorToNext(&it);
     }
+    pthread_mutex_unlock(&listmutex);
 
     // show again
     LinklistIteratorSetBegin(server_list, &it);
-    printf("Servers now online:\n");
+    printf("\nServers now online:\n");
     for(i = 0; i < LinklistGetSize(server_list); ++i) {
         SERVER_INFO *servinfo = LinklistGetDataPtr(&it);
         printf("  - %s:%d -\n", servinfo->addr, servinfo->port);
@@ -159,11 +165,11 @@ void Thread_Server(void *arg) {
 
     // push server list
     if (LinklistGetSize(sockfd_list) > 0) {
-        printf("Push new server list to all servers.\n");     
+        printf("\nPush new server list to all servers.\n");     
         push_list();
     }
+    printf("-----------------------------------\n");
 
-    free(arg);
     CloseSocket(sockfd);
 }
 
@@ -200,7 +206,8 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
     }
     // if a new client connected
     else if (cmd_code == GET_SERVER_LIST) {
-        printf("***Client request\n");
+        printf("-----------------------------------\n");
+        printf("*New Client request\n");
         int list_size = LinklistGetSize(server_list);
         int total_size = list_size * (sizeof(SERVER_INFO));
         char *data = (char *)malloc(total_size);
@@ -216,27 +223,24 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
         // send server list
         CreateMsg2(buf, &back_size, SERVER_LIST_OK, &list_size, sizeof(int), data, total_size);
         SendMsg(sockfd, buf, back_size);
-        free(data);
-        free(buf);      
+        printf("----------------------------------\n");
         CloseSocket(sockfd);
     }
 }
 
 int main() {
     // get ip
-    char interface_name[20];
     char ip[INET_ADDRSTRLEN];
-    while(1) {
-        printf("Interface name: ");
-        scanf("%s", interface_name);
-        if (get_local_ip(interface_name, ip) == -1) {
-            printf("Get IP error, check Interface name.\n\n");
-            continue;
-        }
-        break;
-    }
+    printf("Your computer has these IPs:\n");
+    show_local_ip();
+    printf("\n");
+    printf("Pick one IP to use:\n");
+    int index;
+    scanf("%d", &index);
+    pick_local_ip(index, ip);
 
     // start master main thread
+    pthread_mutex_init(&listmutex, NULL);    
     server_list = LinklistCreate(sizeof(SERVER_INFO));
     sockfd_list = LinklistCreate(sizeof(int));
     pthread_t main_thread;
@@ -254,4 +258,5 @@ int main() {
     CloseSocket(master_sockfd);
     printf("Master stoped.\n");
 
+    return 0;
 }

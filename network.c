@@ -292,26 +292,49 @@ int get_free_port()
     return sin.sin_port;
 }
 
-int get_local_ip(char *interface_name, char *ip) {
+/*
+ * Show all local ip
+ */
+void show_local_ip() {
     struct ifaddrs * ifAddrStruct = NULL;
     void * tmpAddrPtr = NULL;
 
     getifaddrs(&ifAddrStruct);
 
+    int i = 1;
     while (ifAddrStruct != NULL) {
         // check it is IP4
         if (ifAddrStruct->ifa_addr->sa_family == AF_INET) { 
             // is a valid IP4 Address
+            char *address = (char *)malloc(INET_ADDRSTRLEN);
             tmpAddrPtr = &((struct sockaddr_in *)ifAddrStruct->ifa_addr)->sin_addr;
-            char addressBuffer[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
-            if (strcmp(ifAddrStruct->ifa_name, interface_name) == 0) {
-                strncpy(ip, addressBuffer, INET_ADDRSTRLEN);
-                return 1;
-            }
-            // printf("%s IP Address %s\n", ifAddrStruct->ifa_name, addressBuffer); 
+            inet_ntop(AF_INET, tmpAddrPtr, address, INET_ADDRSTRLEN);
+            printf("%d. %s IP Address: %s\n", i, ifAddrStruct->ifa_name, address); 
+            ++i;
+            free(address);
         }   
         ifAddrStruct=ifAddrStruct->ifa_next;
     }
-    return -1;
+}
+
+/*
+ * Pick one ip
+ */
+void pick_local_ip(int index, char *ip) {
+    struct ifaddrs * ifAddrStruct = NULL;
+    void * tmpAddrPtr = NULL;
+
+    getifaddrs(&ifAddrStruct);
+
+    while (ifAddrStruct != NULL && index != 0) {
+        // check it is IP4
+        if (ifAddrStruct->ifa_addr->sa_family == AF_INET) { 
+            // is a valid IP4 Address
+            tmpAddrPtr = &((struct sockaddr_in *)ifAddrStruct->ifa_addr)->sin_addr;
+            inet_ntop(AF_INET, tmpAddrPtr, ip, INET_ADDRSTRLEN);
+            --index;
+        }   
+        ifAddrStruct=ifAddrStruct->ifa_next;
+    }
+
 }
