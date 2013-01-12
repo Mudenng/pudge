@@ -223,6 +223,7 @@ void recv_callback_fn(int sockfd, short event, void *arg) {
         // send server list
         CreateMsg2(buf, &back_size, SERVER_LIST_OK, &list_size, sizeof(int), data, total_size);
         SendMsg(sockfd, buf, back_size);
+        printf("Sended client server list\n");
         printf("----------------------------------\n");
         CloseSocket(sockfd);
     }
