@@ -11,12 +11,6 @@
 /*  DESCRIPTION           :  protocol between server and client     */
 /********************************************************************/
 
-/*
- * Revision log:
- *
- * Created by Pudge Group,2012/12/14
- *
- */
 
 #ifndef PUDGE_PROTOCOL_H
 #define PUDGE_PROTOCOL_H
@@ -66,10 +60,10 @@ int CreateMsg2(void *buf, int *size, int cmd_code, void *data1, int size1, void 
 
 /*
  * AnalyseMsg - 0-2 data
- * input	: buf - point to received message 
+ * input    : buf - point to received message 
  * output   : command code
  * output   : data1, data1_size, data2, data2_size; if no data, *dataX == '\0', *data_size == 0
- * return	: if SUCCESS return 0
+ * return   : if SUCCESS return 0
  *          : if FAILURE return (-1)
  */
 int AnalyseMsg(void *buf, int *cmd_code, void *data1, int *size1, void *data2, int *size2);

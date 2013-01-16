@@ -11,13 +11,6 @@
 /*  DESCRIPTION           :  Interface to socket operation          */
 /********************************************************************/
 
-/*
- * Revision log:
- *
- * Created by Pudge Group,2012/12/14
- * Add some functions,2013/01/05
- *
- */
 
 #ifndef PUDGE_NETWORK_H
 #define PUDGE_NETWORK_H

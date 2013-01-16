@@ -336,8 +336,16 @@ void ExecCommand(char *command) {
         // find which server to use
         Node *nptr = ConhashGetNode(conhash, key);
         int sockfd = ((SERVER *)(nptr->info))->sockfd;
-        // delete
+        // delete from right server
         SendMsg(sockfd, buffer, send_size);
+        // delete from next server, too
+        nptr = ConhashGetNodeAfter(conhash, key, 1);
+        if (nptr != NULL) {
+            int nextsockfd = ((SERVER *)(nptr->info))->sockfd;
+            SendMsg(nextsockfd, buffer, send_size);
+            back_size = RecvMsg(nextsockfd, buffer, BUFFER_SIZE);
+        }
+        // receive msg from right server
         back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
         AnalyseMsg(buffer, &back_code, data1, &size1, data2, &size2);
         if (back_code == DELETE_OK) {
@@ -346,13 +354,7 @@ void ExecCommand(char *command) {
         else if (back_code == ERROR) {
             printf("Delete failed.\n");
         }
-        // delete from next server, too
-        nptr = ConhashGetNodeAfter(conhash, key, 1);
-        if (nptr != NULL) {
-            sockfd = ((SERVER *)(nptr->info))->sockfd;
-            SendMsg(sockfd, buffer, send_size);
-            back_size = RecvMsg(sockfd, buffer, BUFFER_SIZE);
-        }
+        
     }
     // CLOSE
     else if ( CommandMatching(command, "close") == 0 ) {
